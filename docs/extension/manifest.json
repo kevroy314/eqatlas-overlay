@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "EQ Trail \u2014 Zone Atlas overlay",
+  "version": "0.1.0",
+  "description": "Drop an EverQuest log onto the EQL Zone Atlas: your /loc track plays back as an animated 3D trail, with a dwell heatmap of where the time actually went.",
+  "homepage_url": "https://kevroy314.github.io/eqatlas-overlay/",
+  "content_scripts": [
+    {
+      "matches": [
+        "https://eqltools.com/atlas*",
+        "https://eqltools.com/zones/*",
+        "https://norrath3d.com/*"
+      ],
+      "js": [
+        "eqtrail.js"
+      ],
+      "run_at": "document_idle",
+      "world": "MAIN"
+    }
+  ]
+}

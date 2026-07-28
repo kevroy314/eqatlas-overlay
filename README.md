@@ -1,0 +1,166 @@
+# EQ Trail
+
+An overlay for the [EQL Tools Zone Atlas](https://eqltools.com/atlas). Drop an EverQuest log file
+on it and your `/loc` track plays back as an animated 3D trail over the real zone geometry, with a
+heatmap of where the time actually went.
+
+**→ [Install page](https://kevroy314.github.io/eqatlas-overlay/)** (two minutes, Tampermonkey)
+
+![trail and relief heatmap over the Ocean of Tears](docs/relief-and-trail.jpg)
+
+It is an **extension of the Atlas, not a copy of it.** Nothing is re-hosted, no map data is
+mirrored, and the log file never leaves the browser — the whole thing is one script that runs on
+the page you already have open.
+
+---
+
+## Install (one time)
+
+### Userscript — recommended, works in Chrome, Edge and Firefox
+
+1. Install **Tampermonkey** from your browser's official extension store.
+2. Click **[Install EQ Trail](https://kevroy314.github.io/eqatlas-overlay/eqtrail.user.js)**.
+   Tampermonkey shows an install page → click **Install**.
+3. Go to <https://eqltools.com/atlas>, pick a zone. A **Trail** panel appears bottom-right.
+
+It carries `@updateURL`, so later versions install themselves.
+
+### Browser extension — if you'd rather not use Tampermonkey
+
+[`eqtrail-extension.zip`](https://kevroy314.github.io/eqatlas-overlay/eqtrail-extension.zip) is a
+Manifest V3 extension. In Chrome or Edge: `chrome://extensions` → enable **Developer mode** →
+**Load unpacked** → select the unzipped folder. Firefox needs a signed add-on for a permanent
+install, so on Firefox prefer the userscript.
+
+### No install at all
+
+Paste `eqtrail-overlay.js` into the browser console on an already-loaded Atlas page. Same overlay —
+the two bundles above are just this file plus a "wait for the page to be ready" wrapper.
+
+---
+
+## Using it
+
+Drop `eqlog_<Character>_<server>.txt` onto the panel (or click it to browse). The panel then gives you:
+
+| Control | What it does |
+|---|---|
+| **▶ / scrub** | play, pause, or drag to any moment in the session |
+| **speed** | log-seconds per real second |
+| **trail** | how much track stays lit behind the moving head |
+| **ghost** | opacity of the route not yet walked (0 hides it) |
+| **colour** | tint the trail by **time** (when) or **speed** (how fast) |
+| **zone** | appears when the log spans several zones — picks the visit, and loads that map |
+| **cell** | heatmap bin size |
+| **relief** | `flat` paints the floor; higher extrudes the heat into a 3D relief |
+| **weight** | **time** = seconds spent per cell · **visits** = number of `/loc` samples |
+| **layers** | show/hide the path and the heat independently |
+
+The colour bar under the heat controls is labelled in real units — minutes and seconds per cell, or
+sample counts in `visits` mode.
+
+![heatmap painted flat on the terrain](docs/heatmap-flat.jpg)
+
+---
+
+## What your log needs
+
+The only line that carries a position is the one `/loc` prints:
+
+```
+[Mon Jul 27 20:14:06 2026] Your Location is 8277.13, -2583.59, 126.62
+```
+
+Those three numbers are **north, east, up** — EQ prints Y first. `You have entered <Zone>.` lines are
+used to split a session into per-zone segments and pick the right map.
+
+**You do not need to log time separately.** Every line EQ writes is already timestamped, and that
+bracket *is* the time series. The macro only has to emit `/loc`.
+
+Two things worth knowing before you trust the heatmap:
+
+- **Timestamps are whole seconds.** Several `/loc`s inside one second arrive with identical stamps;
+  the parser spreads a same-second run evenly across that second so playback doesn't stutter. It
+  invents no positions — it only distributes samples already known to fall in that second.
+
+- **A `/loc` bound to movement measures traffic, not dwell.** If the macro only fires while you're
+  moving, standing still emits nothing, so "time per cell" credits a whole camp to the last sample
+  before you stopped. Use **weight: visits** for that kind of log — it counts samples and is honest
+  about it. A `/loc` on a fixed interval (every few seconds regardless of movement) makes the two
+  readings agree, and **time** is then the better one. Either way no single gap can dominate: a
+  sample may claim at most `opts.maxGap` seconds (30 by default), so one AFK stretch can't eat the
+  colour range.
+
+---
+
+## Synthetic test data
+
+`data/` holds two generated logs in the exact format above, so the overlay can be exercised without
+a real character:
+
+- `eqlog_Testchar_legends.txt` — 918 `/loc`s over 46 minutes in the Ocean of Tears: island camps
+  with real dwell, travel legs between them.
+- `eqlog_Twozone_legends.txt` — the same session zoning into Butcherblock Mountains, including
+  deliberate same-second bursts, to exercise segmentation and sub-second spreading.
+
+`tools/gen_log.py` regenerates the first. It raycasts the actual zone mesh (`tools/oot_grid.json`,
+a height grid sampled from the live Atlas) so the synthetic track lands on real ground and real
+island tops rather than floating.
+
+---
+
+## How it attaches
+
+`atlas/app.js` is an ES module — nothing of its own is global — but it publishes a debug handle at
+the end:
+
+```js
+window.__dbg = { get Z(), scene, THREE, locToMesh, meshToLoc, loadZone, cam(), ctl(), ... }
+```
+
+That is the entire integration surface. We add objects; we never patch their code. Two rules make
+the overlay behave like a native layer, and three details will silently defeat you if you miss them
+— all of it is commented at the point it matters in `eqtrail-overlay.js`:
+
+- **Coordinates.** `mesh.x = -east/10`, `mesh.y = up/10`, `mesh.z = north/10`. Use their
+  `locToMesh`; it is the source of truth for every coordinate the page shows.
+- **Parenting.** In the exploded view each floor band group is lifted (`Z.groups[i].position.y`).
+  Overlay objects are parented into the band their height falls in, so they ride the lift, the
+  height slider and the per-floor visibility for free — the same trick `placeMarker` uses.
+- **`logarithmicDepthBuffer: true`.** Their renderer uses it. A custom shader that omits three's
+  `logdepthbuf_*` chunks writes ordinary depth into a log-depth buffer, loses the depth test
+  against the ground, and is invisible everywhere **with no error in the console**.
+- **`Z.clip` is per band.** `Z.clip[i]` is that band's `[yMin, yMax]` plane pair. Handing a material
+  the whole nested array clips everything away.
+- **`InstancedMesh` colours take no `vertexColors` flag.** `setColorAt` populates `instanceColor`
+  and three defines `USE_INSTANCING_COLOR` itself. Adding `vertexColors: true` also defines
+  `USE_COLOR`, the shader then reads a per-vertex `color` attribute a `BoxGeometry` doesn't have,
+  and every cell renders pure black.
+
+## Why an overlay rather than a hosted app
+
+`/atlas/zones/*.json` and `*.glb` return **403 unless the request carries
+`Sec-Fetch-Site: same-origin`** — a header a browser can never send cross-origin and only a server
+can forge. That is a deliberate hotlink guard, so the zone geometry is not ours to re-serve. Running
+on their page instead costs them one ordinary page view and keeps the maps exactly as published.
+
+Map data and geometry are © eqltools.com — see <https://eqltools.com/sources>.
+
+---
+
+## Files
+
+```
+eqtrail-overlay.js        the overlay — the only hand-written source. Paste it into a
+                          console as-is, or let tools/build.py wrap it for distribution.
+tools/build.py            -> docs/eqtrail.user.js, docs/extension/, docs/eqtrail-extension.zip
+tools/gen_log.py          regenerates the synthetic Ocean of Tears session
+tools/oot_grid.json       ground-height grid raycast from the live Atlas
+data/                     synthetic logs
+docs/                     the GitHub Pages site: install page, built bundles, screenshots
+```
+
+`docs/` is both the published install page and the build output — GitHub Pages serves that folder,
+and Tampermonkey installs from any URL ending in `.user.js`. **Everything under `docs/` except
+`index.html` and the images is generated: edit `eqtrail-overlay.js`, then re-run
+`python3 tools/build.py`.**

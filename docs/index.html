@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EQ Trail — /loc path + dwell heatmap for the EQL Zone Atlas</title>
+<meta name="description" content="Drop an EverQuest log onto the EQL Zone Atlas and watch your /loc track play back as an animated 3D trail, with a heatmap of where the time went.">
+<style>
+  :root{
+    --bg:#0b0913; --panel:#15122480; --line:#2c2545; --ink:#e8e6f2; --dim:#9d95bb;
+    --faint:#7d7495; --acc:#7c6fe0; --acc2:#9fe8ff; --warn:#e8c98a; --code:#191430;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:16px/1.65 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+    background-image:radial-gradient(ellipse 90% 55% at 50% -10%,#241c46 0%,transparent 70%)}
+  .wrap{max-width:760px;margin:0 auto;padding:0 22px 90px}
+  header{padding:64px 0 30px;text-align:center}
+  h1{margin:0;font-size:clamp(30px,6vw,44px);letter-spacing:-.02em}
+  h1 span{color:var(--acc2)}
+  .sub{margin:12px auto 0;max-width:33em;color:var(--dim);font-size:17px}
+  h2{margin:52px 0 14px;font-size:20px;letter-spacing:-.01em;
+    padding-bottom:8px;border-bottom:1px solid var(--line)}
+  h3{margin:26px 0 8px;font-size:15px;color:var(--acc2);letter-spacing:.02em}
+  p{margin:12px 0}
+  a{color:var(--acc2)}
+  figure{margin:26px 0}
+  figure img{width:100%;border-radius:12px;border:1px solid var(--line);display:block}
+  figcaption{margin-top:9px;color:var(--faint);font-size:13px;text-align:center}
+
+  .cta{display:block;margin:26px 0 10px;padding:19px 24px;text-align:center;text-decoration:none;
+    background:linear-gradient(180deg,#6b5cd6,#5344b0);color:#fff;border-radius:12px;
+    font-size:19px;font-weight:600;border:1px solid #8b7df0;
+    box-shadow:0 8px 26px #5344b055;transition:transform .12s ease,box-shadow .12s ease}
+  .cta:hover{transform:translateY(-1px);box-shadow:0 12px 32px #5344b077}
+  .cta small{display:block;margin-top:5px;font-size:13px;font-weight:400;opacity:.85}
+
+  ol.steps{counter-reset:s;list-style:none;padding:0;margin:26px 0}
+  ol.steps>li{counter-increment:s;position:relative;padding:0 0 22px 52px;margin:0;
+    border-left:1px solid var(--line);margin-left:16px}
+  ol.steps>li:last-child{border-left-color:transparent;padding-bottom:0}
+  ol.steps>li::before{content:counter(s);position:absolute;left:-16px;top:-4px;
+    width:32px;height:32px;border-radius:50%;display:grid;place-items:center;
+    background:#241d40;border:1px solid #443a68;color:var(--acc2);
+    font:600 14px/1 ui-monospace,monospace}
+  /* only the leading title is a block — inline <b> inside the step text must stay inline */
+  ol.steps>li>b:first-child{display:block;font-size:17px;margin-bottom:2px}
+  .stores{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+  .stores a{padding:7px 13px;border:1px solid #443a68;border-radius:8px;background:#1d1836;
+    text-decoration:none;color:var(--ink);font-size:14px}
+  .stores a:hover{background:#2a2247;border-color:var(--acc)}
+
+  .note{background:#1a1530;border:1px solid var(--line);border-left:3px solid var(--warn);
+    border-radius:0 10px 10px 0;padding:14px 17px;margin:20px 0;font-size:15px}
+  .note b{color:var(--warn)}
+  code{background:var(--code);border:1px solid var(--line);border-radius:5px;
+    padding:1px 6px;font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:#cfc7ea}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:10px;
+    padding:14px 16px;overflow-x:auto;margin:14px 0}
+  pre code{background:none;border:0;padding:0;font-size:13px;color:#cfc7ea}
+
+  table{width:100%;border-collapse:collapse;margin:16px 0;font-size:15px;display:block;overflow-x:auto}
+  th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--faint);font-weight:600;font-size:13px;text-transform:uppercase;letter-spacing:.06em}
+  td:first-child{white-space:nowrap;color:var(--acc2);font-family:ui-monospace,monospace;font-size:13px}
+
+  details{border:1px solid var(--line);border-radius:10px;padding:12px 16px;margin:14px 0;background:#14102a55}
+  summary{cursor:pointer;color:var(--dim);font-size:15px}
+  summary:hover{color:var(--ink)}
+  footer{margin-top:60px;padding-top:22px;border-top:1px solid var(--line);
+    color:var(--faint);font-size:13.5px;text-align:center}
+  .panelshot{float:right;width:190px;margin:0 0 14px 20px;border-radius:10px;border:1px solid var(--line)}
+  @media (max-width:620px){.panelshot{float:none;width:100%;margin:14px 0}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>EQ&nbsp;Trail<span>.</span></h1>
+  <p class="sub">Drop your EverQuest log on the <a href="https://eqltools.com/atlas">EQL&nbsp;Zone&nbsp;Atlas</a>
+  and watch where you actually went — an animated 3D trail of your <code>/loc</code> track, and a
+  heatmap of where the time went.</p>
+</header>
+
+<figure>
+  <img src="relief-and-trail.jpg" alt="A glowing trail crosses the Ocean of Tears between islands; orange spikes rise from an island where time was spent.">
+  <figcaption>One session in the Ocean of Tears. The trail is coloured by time; the spikes are minutes camped, as height.</figcaption>
+</figure>
+
+<h2>Install it — about two minutes</h2>
+
+<ol class="steps">
+  <li>
+    <b>Install Tampermonkey</b>
+    It's the standard userscript manager, straight from your browser's own store.
+    <div class="stores">
+      <a href="https://chromewebstore.google.com/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo">Chrome</a>
+      <a href="https://microsoftedge.microsoft.com/addons/detail/tampermonkey/iikmkjmpaadaobahmlepeloendndfphd">Edge</a>
+      <a href="https://addons.mozilla.org/firefox/addon/tampermonkey/">Firefox</a>
+    </div>
+  </li>
+  <li>
+    <b>Click the button below</b>
+    Tampermonkey opens an install page. Click <b>Install</b>. That's the whole thing.
+    <a class="cta" href="eqtrail.user.js">Install EQ&nbsp;Trail
+      <small>updates itself from here — you never have to do this again</small></a>
+  </li>
+  <li>
+    <b>Open a zone and drop your log</b>
+    Go to <a href="https://eqltools.com/atlas">eqltools.com/atlas</a> and pick a zone. A
+    <b>Trail</b> panel appears in the bottom-right. Drag your
+    <code>eqlog_&lt;Character&gt;_&lt;server&gt;.txt</code> onto it — or click it to browse.
+  </li>
+</ol>
+
+<div class="note">
+  <b>Your log never leaves your computer.</b> The file is read and drawn entirely in your own
+  browser. Nothing is uploaded, and this page has no server behind it — it just hands you a script.
+</div>
+
+<h2>What your log needs</h2>
+
+<p>Exactly one thing: <code>/loc</code> lines. That is the only line vanilla EverQuest writes that
+carries a position.</p>
+
+<pre><code>[Mon Jul 27 20:14:06 2026] Your Location is 8277.13, -2583.59, 126.62</code></pre>
+
+<p>Those three numbers are <b>north, east, up</b> — EQ prints Y first. Bind <code>/loc</code> to a
+macro and let it fire while you play. <code>You have entered &lt;Zone&gt;.</code> lines are picked up
+too, and are used to split a session by zone and load the right map for you.</p>
+
+<h3>You don't need to log the time</h3>
+<p>Every line EQ writes is already stamped with the date and time — that bracket <em>is</em> the time
+series. Your macro only has to say <code>/loc</code>.</p>
+
+<h3>How often the macro fires changes what the heatmap means</h3>
+<p>If <code>/loc</code> only fires <b>while you move</b>, then standing still writes nothing — so the
+map is measuring <b>traffic</b>, not time. Flip the panel's <b>weight</b> toggle to
+<b>visits</b> for that kind of log and it counts samples instead, honestly. A <code>/loc</code> on a
+<b>fixed interval</b> — every few seconds whether you're moving or not — makes both readings agree,
+and <b>time</b> is then the better one. Either way, one AFK gap can never dominate the colours: a
+single sample may claim at most 30&nbsp;seconds.</p>
+
+<div class="note">
+  Timestamps are whole seconds, so several <code>/loc</code>s inside one second arrive identical.
+  EQ Trail spreads a same-second run evenly across that second so playback doesn't stutter — it
+  invents no positions, it only distributes samples already known to fall inside that second.
+</div>
+
+<h2>The panel</h2>
+
+<img class="panelshot" src="panel.jpg" alt="The Trail control panel: playback scrubber, colour and heatmap sliders, and a legend labelled in minutes.">
+
+<table>
+  <tr><th>Control</th><th>What it does</th></tr>
+  <tr><td>▶ / scrub</td><td>play, pause, or drag to any moment in the session</td></tr>
+  <tr><td>speed</td><td>log-seconds per real second</td></tr>
+  <tr><td>trail</td><td>how much track stays lit behind the moving head</td></tr>
+  <tr><td>ghost</td><td>opacity of the route not yet walked — 0 hides it</td></tr>
+  <tr><td>colour</td><td>tint the trail by <b>time</b> (when) or <b>speed</b> (how fast)</td></tr>
+  <tr><td>zone</td><td>appears when a log spans several zones; picks the visit and loads that map</td></tr>
+  <tr><td>cell</td><td>heatmap bin size</td></tr>
+  <tr><td>relief</td><td><b>flat</b> paints the floor; higher extrudes the heat into a 3D relief</td></tr>
+  <tr><td>weight</td><td><b>time</b> = seconds per cell · <b>visits</b> = number of samples</td></tr>
+  <tr><td>layers</td><td>show or hide the path and the heat independently</td></tr>
+</table>
+
+<p>The colour bar is labelled in real units — minutes and seconds per cell, or sample counts in
+<b>visits</b> mode — so a colour you see on the map can be read off the scale.</p>
+
+<figure>
+  <img src="heatmap-flat.jpg" alt="An island with the heatmap painted flat across the terrain, magenta at the edges and yellow-white at the centre.">
+  <figcaption><b>relief: flat</b> paints the dwell straight onto the ground instead of standing it up.</figcaption>
+</figure>
+
+<h2>Other ways to install</h2>
+
+<details>
+  <summary>As a browser extension instead of a userscript</summary>
+  <p><a href="eqtrail-extension.zip">Download the extension zip</a>, unzip it, then in Chrome or Edge
+  open <code>chrome://extensions</code>, turn on <b>Developer mode</b>, and choose
+  <b>Load unpacked</b> → the unzipped folder. Firefox requires signed add-ons for a permanent
+  install, so on Firefox use the userscript.</p>
+</details>
+
+<details>
+  <summary>No install at all — paste it in the console</summary>
+  <p>Open a zone on the Atlas, open the developer console, and paste the contents of
+  <a href="https://github.com/kevroy314/eqatlas-overlay/blob/main/eqtrail-overlay.js"><code>eqtrail-overlay.js</code></a>.
+  Same overlay — the packaged versions are just that file plus a "wait until the page is ready"
+  wrapper. It lasts until you reload.</p>
+</details>
+
+<details>
+  <summary>Nothing appeared — what now?</summary>
+  <p>Check that you're on a zone page (<code>eqltools.com/atlas?zone=…</code>) and that the 3D view
+  has finished loading. Open the console: EQ Trail logs <code>[EQTrail] ready</code> when it
+  attaches, and says so plainly if the page never published the handle it hooks into. If you dropped
+  a log and got a message about no location lines, the log has no <code>/loc</code> output in it —
+  check the macro is actually firing, and that you grabbed the right
+  <code>eqlog_*.txt</code>.</p>
+</details>
+
+<h2>How it works, briefly</h2>
+
+<p>EQ Trail doesn't copy the Atlas or re-host any map data — it runs <em>on</em> the Atlas page and
+adds two objects to the scene the site already draws. It hooks the debug handle
+<code>app.js</code> publishes, converts each <code>/loc</code> through the site's own coordinate
+transform, and parents the trail and the heat into the floor-band groups, so both ride the
+exploded-floors animation, the height slider and the per-floor clipping exactly like the site's own
+markers do.</p>
+
+<p>Source, the synthetic test logs, and notes on the parts that are easy to get wrong live in the
+<a href="https://github.com/kevroy314/eqatlas-overlay">GitHub repository</a>.</p>
+
+<footer>
+  A fan tool. Zone geometry, maps and data are © <a href="https://eqltools.com">eqltools.com</a> —
+  sources at <a href="https://eqltools.com/sources">eqltools.com/sources</a>.<br>
+  Not affiliated with EQL&nbsp;Tools or Daybreak Game Company.
+</footer>
+
+</div>
+</body>
+</html>
