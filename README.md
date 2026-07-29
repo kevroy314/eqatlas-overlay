@@ -50,7 +50,7 @@ Drop `eqlog_<Character>_<server>.txt` onto the panel (or click it to browse). Th
 | **trail** | how much track stays lit behind the moving head |
 | **ghost** | opacity of the route not yet walked (0 hides it) |
 | **colour** | tint the trail by **time** (when) or **speed** (how fast) |
-| **zone** | appears when the log spans several zones — picks the visit, and loads that map |
+| **zone** | every zone found in the log, biggest first — pick one and it loads that map |
 | **cell** | heatmap bin size |
 | **relief** | `flat` paints the floor; higher extrudes the heat into a 3D relief |
 | **weight** | **time** = seconds spent per cell · **visits** = number of `/loc` samples |
@@ -72,10 +72,22 @@ The only line that carries a position is the one `/loc` prints:
 ```
 
 Those three numbers are **north, east, up** — EQ prints Y first. `You have entered <Zone>.` lines are
-used to split a session into per-zone segments and pick the right map.
+used to split a session by zone and pick the right map.
 
 **You do not need to log time separately.** Every line EQ writes is already timestamped, and that
 bracket *is* the time series. The macro only has to emit `/loc`.
+
+**Drop the whole log — size is not a problem.** Logs are read in 4 MiB slices with a cheap
+`indexOf` filter ahead of the regex, so nothing large is ever held in memory at once. Measured on
+two real files: 121 MB / 1.57 M lines and 79 MB / 1.0 M lines, each parsed in **under three
+seconds**, with a progress readout while it works.
+
+**A log spanning many zones is normal, and handled.** One of those real files had 239 `/loc`s
+scattered over 17 zones. Each zone's visits are merged into one series (37 separate visits to the
+Emerald Jungle are useless as 37 three-point stubs), the panel lists them by sample count, and the
+overlay defaults to **the zone already open on the page** if the log has any samples there — you
+are never yanked to a different map. Zones the atlas doesn't carry are labelled `no map` and drawn
+on whatever zone you have open.
 
 Two things worth knowing before you trust the heatmap:
 
@@ -90,6 +102,11 @@ Two things worth knowing before you trust the heatmap:
   readings agree, and **time** is then the better one. Either way no single gap can dominate: a
   sample may claim at most `opts.maxGap` seconds (30 by default), so one AFK stretch can't eat the
   colour range.
+
+- **The ribbon breaks where the log went quiet.** Consecutive samples more than `opts.gapBreak`
+  seconds apart (300 by default) start a new run rather than joining. Without it, two `/loc`s from
+  different days — or from either side of a camp — would be drawn as a confident straight line
+  across the zone.
 
 ---
 

@@ -142,8 +142,18 @@ map is measuring <b>traffic</b>, not time. Flip the panel's <b>weight</b> toggle
 and <b>time</b> is then the better one. Either way, one AFK gap can never dominate the colours: a
 single sample may claim at most 30&nbsp;seconds.</p>
 
+<h3>Big logs and many zones are fine</h3>
+<p>Drop the whole thing. Logs are read in slices rather than all at once — two real files,
+121&nbsp;MB and 79&nbsp;MB (1.5 million lines between them), each parsed in under three seconds,
+with a progress readout while it works.</p>
+<p>A log that wanders through a dozen zones is normal. Every zone found gets an entry in the
+panel's <b>zone</b> list, biggest first, with each zone's repeat visits merged into one series —
+and EQ Trail starts on <b>the zone you already have open</b> if your log has any samples there,
+rather than yanking you somewhere else. Zones the Atlas doesn't carry are marked <code>no map</code>
+and drawn over whatever zone is open.</p>
+
 <div class="note">
-  Timestamps are whole seconds, so several <code>/loc</code>s inside one second arrive identical.
+  Timestamps are whole seconds, so several <code>/loc</code> lines inside one second arrive identical.
   EQ Trail spreads a same-second run evenly across that second so playback doesn't stutter — it
   invents no positions, it only distributes samples already known to fall inside that second.
 </div>
@@ -159,7 +169,7 @@ single sample may claim at most 30&nbsp;seconds.</p>
   <tr><td>trail</td><td>how much track stays lit behind the moving head</td></tr>
   <tr><td>ghost</td><td>opacity of the route not yet walked — 0 hides it</td></tr>
   <tr><td>colour</td><td>tint the trail by <b>time</b> (when) or <b>speed</b> (how fast)</td></tr>
-  <tr><td>zone</td><td>appears when a log spans several zones; picks the visit and loads that map</td></tr>
+  <tr><td>zone</td><td>every zone found in the log, biggest first — pick one and it loads that map</td></tr>
   <tr><td>cell</td><td>heatmap bin size</td></tr>
   <tr><td>relief</td><td><b>flat</b> paints the floor; higher extrudes the heat into a 3D relief</td></tr>
   <tr><td>weight</td><td><b>time</b> = seconds per cell · <b>visits</b> = number of samples</td></tr>

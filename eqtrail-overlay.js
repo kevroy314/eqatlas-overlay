@@ -21,10 +21,18 @@
  *      — and it then rides the lift, the clip planes and the per-floor visibility for free.
  *
  * PUBLIC API
- *     EQTrail.loadLog(text)   parse an eqlog_*.txt, build both layers
+ *     EQTrail.loadFile(file)  stream a File (the drop path — use this for real, huge logs)
+ *     EQTrail.loadLog(text)   same, from a string already in memory
  *     EQTrail.loadPoints(pts) [{t:<epoch seconds>, north, east, up}, ...] — skip the parser
+ *     EQTrail.useSegment(i)   switch to another zone found in the log
  *     EQTrail.play() / .pause() / .setT(0..1) / .clear() / .rebuild()
  *     EQTrail.opts            live-tunable options (see DEFAULTS)
+ *
+ * WHAT A REAL LOG LOOKS LIKE (measured, not assumed)
+ *     121 MB · 1,573,716 lines · 26 /locs, all in one zone
+ *      79 MB ·   999,925 lines · 239 /locs spread over 12 zones and 300+ visits
+ * So: stream the file rather than reading it whole, filter with indexOf before regex, merge a
+ * zone's many visits into one series, and break the ribbon wherever the log went quiet.
  */
 (function () {
   'use strict';
@@ -59,6 +67,12 @@
     // measures traffic, not dwell. Default 'time'; the toggle is in the panel.
     heatBy: 'time',
     maxGap: 30,             // seconds any one sample may claim (an AFK gap is not standing still)
+    // Break the ribbon when consecutive samples are further apart than this. A real log is not a
+    // continuous track: the macro stops, you camp, you log out, you come back three days later —
+    // and every zone visit gets merged into one series. Without a break the tube draws a confident
+    // straight line across the whole zone between two samples that have nothing to do with
+    // each other. 5 minutes is long enough to keep a genuine run intact.
+    gapBreak: 300,
   };
 
   // ============================ colour ramps ============================
@@ -89,20 +103,57 @@
   const RE_ZONE = /^You have entered ([^.]+)\./i;
   const MON = { Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11 };
 
-  function parseLog(text) {
-    const out = [], zones = [];
-    for (const raw of text.split(/\r?\n/)) {
-      const m = RE_LINE.exec(raw); if (!m) continue;
-      const t = Date.UTC(+m[7], MON[m[2]], +m[3], +m[4], +m[5], +m[6]) / 1000;
-      const body = m[8];
-      const z = RE_ZONE.exec(body);
-      if (z) { zones.push({ t, name: z[1].trim() }); continue; }
-      const l = RE_LOC.exec(body);
+  // One line of a log. Cheap `indexOf` guards come FIRST: a real log is overwhelmingly combat
+  // spam — 1.5 million lines for 26 /locs is a normal ratio — and running two regexes over every
+  // one of them is the difference between a snappy parse and a hung tab.
+  function eatLine(raw, out, zones) {
+    const isLoc = raw.indexOf('Your Location is') >= 0;
+    if (!isLoc && raw.indexOf('You have entered') < 0) return;
+    const m = RE_LINE.exec(raw.charCodeAt(raw.length - 1) === 13 ? raw.slice(0, -1) : raw);
+    if (!m) return;
+    const t = Date.UTC(+m[7], MON[m[2]], +m[3], +m[4], +m[5], +m[6]) / 1000;
+    if (isLoc) {
+      const l = RE_LOC.exec(m[8]);
       if (l) out.push({ t, north: +l[1], east: +l[2], up: +l[3] });
+    } else {
+      const z = RE_ZONE.exec(m[8]);
+      if (z) zones.push({ t, name: z[1].trim() });
     }
+  }
+
+  function finish(out, zones) {
     out.sort((a, b) => a.t - b.t);
     spreadWithinSecond(out);
     return { pts: out, zones };
+  }
+
+  function parseLog(text) {
+    const out = [], zones = [];
+    for (const raw of text.split('\n')) eatLine(raw, out, zones);
+    return finish(out, zones);
+  }
+
+  // Real logs are enormous — 121 MB and 1.5 million lines is an ordinary one. Reading that with
+  // file.text() materialises the whole thing as a JS string and then split() explodes it into a
+  // million more, which is how you get a dead tab. Walk the File in slices instead, carry the
+  // partial last line across the boundary, and keep only the handful of lines that matter.
+  async function parseFile(file, onProgress) {
+    const CHUNK = 4 << 20;                       // 4 MiB — big enough to be cheap, small enough to yield
+    const dec = new TextDecoder('utf-8');
+    const out = [], zones = [];
+    let carry = '';
+    for (let off = 0; off < file.size; off += CHUNK) {
+      const buf = await file.slice(off, off + CHUNK).arrayBuffer();
+      // stream:true so a multi-byte character split across the slice boundary survives
+      const text = carry + dec.decode(new Uint8Array(buf), { stream: true });
+      const lines = text.split('\n');
+      carry = lines.pop();                       // last element is a partial line (or '')
+      for (let i = 0; i < lines.length; i++) eatLine(lines[i], out, zones);
+      if (onProgress) onProgress(Math.min(1, (off + CHUNK) / file.size));
+      await new Promise(r => setTimeout(r, 0));  // hand the frame back so playback keeps running
+    }
+    if (carry) eatLine(carry, out, zones);
+    return finish(out, zones);
   }
 
   // EQ stamps every log line to the SECOND. A /loc macro that fires faster than that (or a burst
@@ -137,6 +188,28 @@
     }
     for (const s of segs) { s.t0 = s.pts[0].t; s.t1 = s.pts[s.pts.length - 1].t; }
     return segs;
+  }
+
+  // Then MERGE the visits. A real log crosses the same zone over and over — one file here has 100
+  // /locs in the Emerald Jungle spread over 37 separate visits, so per-visit segments would be 37
+  // useless three-point stubs. Grouping by zone is the only view that has anything in it; the
+  // ribbon is broken at `gapBreak` so merged visits never draw a line between them.
+  function groupZones(segs) {
+    const by = new Map();
+    for (const s of segs) {
+      const k = s.key || ('?' + (s.name || 'unknown'));
+      let g = by.get(k);
+      if (!g) by.set(k, g = { name: s.name, key: s.key, pts: [], visits: 0 });
+      for (const p of s.pts) g.pts.push(p);     // not push(...s.pts) — that blows the stack on big arrays
+      g.visits++;
+    }
+    const out = [...by.values()];
+    for (const g of out) {
+      g.pts.sort((a, b) => a.t - b.t);
+      g.t0 = g.pts[0].t; g.t1 = g.pts[g.pts.length - 1].t;
+    }
+    out.sort((a, b) => b.pts.length - a.pts.length);
+    return out;
   }
 
   // ============================= geometry ===============================
@@ -291,17 +364,21 @@
   const O = {
     opts: Object.assign({}, DEFAULTS),
     raw: [],            // parsed loc samples
-    group: null,        // holder parented into a band group
-    tube: null, heat: null, head: null, beam: null,
+    tubes: [],          // one per unbroken run of samples; all share O.pathMat
+    tube: null, pathMat: null, heat: null, head: null, beam: null,
     t0: 0, t1: 1, u: 1, playing: false, _raf: 0, _last: 0,
   };
 
   function detach() {
-    for (const o of [O.tube, O.heat, O.head, O.beam]) {
+    for (const o of [...O.tubes, O.heat, O.head, O.beam]) {
       if (o && o.parent) o.parent.remove(o);
-      if (o) { o.geometry && o.geometry.dispose(); o.material && o.material.dispose && o.material.dispose(); }
+      if (o && o.geometry) o.geometry.dispose();
     }
-    O.tube = O.heat = O.head = O.beam = null;
+    // The tubes SHARE one material — dispose it once, not once per run.
+    if (O.pathMat) O.pathMat.dispose();
+    for (const o of [O.heat, O.head, O.beam]) if (o && o.material) o.material.dispose();
+    O.tubes = []; O.runs = 0; O.lone = 0;
+    O.tube = O.pathMat = O.heat = O.head = O.beam = null;
   }
 
   O.clear = function () {
@@ -319,23 +396,36 @@
     return hit && hit.key;
   }
 
-  O.loadLog = function (text) {
-    const { pts, zones } = parseLog(text);
+  O.loadLog = function (text) { return accept(parseLog(text)); };
+
+  // The drop/browse path. Streams the file and reports progress, because "nothing is happening"
+  // for twenty seconds on a 121 MB log is indistinguishable from "it's broken".
+  O.loadFile = async function (file) {
+    const mb = (file.size / 1048576).toFixed(0);
+    note(`Reading ${file.name} (${mb} MB)… 0%`);
+    const t0 = performance.now();
+    const parsed = await parseFile(file, f => note(`Reading ${file.name} (${mb} MB)… ${Math.round(f * 100)}%`));
+    console.log(`[EQTrail] parsed ${file.name} in ${((performance.now() - t0) / 1000).toFixed(1)}s`);
+    return accept(parsed);
+  };
+
+  function accept({ pts, zones }) {
     if (!pts.length) {
-      note('No "Your Location is" lines in that file — is the /loc macro running, and is this the ' +
-           'right eqlog_*.txt?');
+      note('No "Your Location is" lines in that file — is the /loc macro actually firing, and is ' +
+           'this the right eqlog_*.txt?');
       return { pts: 0, zones: zones.length };
     }
-    O.segments = segmentize(pts, zones);
-    // Prefer a segment we can actually map, and among those the longest — that is the session the
-    // reader came to look at. Falls back to the longest segment overall.
-    const mappable = O.segments.filter(s => s.key);
-    const best = (mappable.length ? mappable : O.segments)
-      .reduce((a, b) => (b.pts.length > a.pts.length ? b : a));
+    O.segments = groupZones(segmentize(pts, zones));
+    O.totalPts = pts.length;
+    // Default to the zone ALREADY on the page if the log has any samples there — the reader chose
+    // that zone, and silently yanking them to a different one is rude. Otherwise take the zone with
+    // the most samples, preferring one the atlas can actually draw.
+    const here = D.Z && O.segments.find(s => s.key === D.Z.key);
+    const best = here || O.segments.find(s => s.key) || O.segments[0];
     fillSegPicker();
     O.useSegment(O.segments.indexOf(best));
-    return { pts: pts.length, segments: O.segments.length, zone: best.name };
-  };
+    return { pts: pts.length, zones: O.segments.length, zone: best.name, showing: best.pts.length };
+  }
 
   // Switching segments may mean switching ZONES. loadZone() tears the scene down and rebuilds the
   // band groups, which takes our objects with it, so the rebuild has to wait for it to resolve.
@@ -346,9 +436,11 @@
     O.raw = s.pts;
     const sel = document.getElementById('eqtrail-seg');
     if (sel) sel.value = String(i);
+    let failed = false;
     if (s.key && D.Z && s.key !== D.Z.key) {
       note(`Loading ${s.name}…`);
-      try { await D.loadZone(s.key); } catch (e) { note('Could not load ' + s.name); }
+      try { await D.loadZone(s.key); note(''); }
+      catch (e) { failed = true; note('Could not load ' + s.name + ' — drawing on the zone you have open.'); }
     } else if (!s.key) {
       note(s.name ? `No atlas zone matches "${s.name}" — drawing on the zone you have open.`
                   : 'Log has no zone line before these /locs — drawing on the zone you have open.');
@@ -400,15 +492,35 @@
         u: (s.t - O.t0) / span,
         s: Math.min(1, s.spd / (maxSpd * 0.85)),
       }));
+      // Cut the point list wherever the log went quiet. Each run becomes its own tube; they all
+      // share ONE material, so the playback uniforms still drive every piece together.
+      const runs = [];
+      let run = [P[0]];
+      for (let i = 1; i < P.length; i++) {
+        if (S[i].t - S[i - 1].t > o.gapBreak) { runs.push(run); run = []; }
+        run.push(P[i]);
+      }
+      runs.push(run);
+
       const midY = P[Math.floor(P.length / 2)].p.y;
       const mat = pathMaterial(bandClip(Z, midY));
       mat.uniforms.uTrail.value = o.trail;
       mat.uniforms.uFuture.value = o.future;
       mat.uniforms.uMode.value = o.colorBy === 'speed' ? 1 : 0;
-      O.tube = new T.Mesh(buildTube(P, R, o.radialSegments), mat);
-      O.tube.renderOrder = 995; O.tube.frustumCulled = false;
-      O.tube.raycast = () => {};
-      bandGroupForY(Z, midY).add(O.tube);
+      O.pathMat = mat;
+      for (const r of runs) {
+        if (r.length < 2) continue;              // a lone sample has no direction — nothing to extrude
+        const mesh = new T.Mesh(buildTube(r, R, o.radialSegments), mat);
+        mesh.renderOrder = 995; mesh.frustumCulled = false;
+        mesh.raycast = () => {};
+        bandGroupForY(Z, midY).add(mesh);
+        O.tubes.push(mesh);
+      }
+      O.tube = O.tubes[0] || null;
+      // Report what was actually DRAWN, not how many runs the split produced: a run of one sample
+      // has no direction to extrude, so it contributes heat but no ribbon.
+      O.runs = O.tubes.length;
+      O.lone = runs.length - O.tubes.length;
 
       // head marker + a dashed column so you can find "now" even when it's behind a hill
       const hg = new T.SphereGeometry(1, 20, 14);
@@ -511,7 +623,7 @@
 
   // ============================ playback ================================
   function applyU() {
-    if (O.tube) O.tube.material.uniforms.uHead.value = O.u;
+    if (O.pathMat) O.pathMat.uniforms.uHead.value = O.u;
     if (!O.raw.length) return;
     const tNow = O.t0 + (O.t1 - O.t0) * O.u;
     // walk to the sample at/just before tNow (binary search — the scrubber can jump)
@@ -638,11 +750,12 @@
     const sel = document.getElementById('eqtrail-seg');
     const wrap = document.getElementById('eqtrail-segrow');
     if (!sel || !O.segments) return;
-    // One zone visit, nothing to choose — don't spend a row of the panel on it.
-    wrap.style.display = O.segments.length > 1 ? 'flex' : 'none';
-    const hhmm = t => new Date(t * 1000).toISOString().slice(11, 16);
+    // Always shown once a log is loaded, even for a single zone: a log covering twelve zones draws
+    // one of them, and the reader has to be able to see WHICH — and change it.
+    wrap.style.display = 'flex';
     sel.innerHTML = O.segments.map((s, i) =>
-      `<option value="${i}">${s.name || 'unknown zone'} · ${hhmm(s.t0)}–${hhmm(s.t1)} · ${s.pts.length}</option>`
+      `<option value="${i}">${s.name || 'unknown zone'} · ${s.pts.length} loc${s.pts.length === 1 ? '' : 's'}` +
+      (s.visits > 1 ? ` · ${s.visits} visits` : '') + (s.key ? '' : ' · no map') + `</option>`
     ).join('');
   }
 
@@ -694,8 +807,8 @@
         O.opts[k] = v;
         el.querySelector(`[data-v="${k}"]`).textContent =
           k === 'speed' ? v + '×' : k === 'cell' ? v : k === 'relief' ? (v == 0 ? 'flat' : v) : Math.round(v * 100) + '%';
-        if (k === 'trail' && O.tube) O.tube.material.uniforms.uTrail.value = v;
-        else if (k === 'future' && O.tube) O.tube.material.uniforms.uFuture.value = v;
+        if (k === 'trail' && O.pathMat) O.pathMat.uniforms.uTrail.value = v;
+        else if (k === 'future' && O.pathMat) O.pathMat.uniforms.uFuture.value = v;
         else if (k === 'heatOpacity' && O.heat) O.heat.material.opacity = v;
         else if (k === 'cell' || k === 'relief') { O.rebuild(); stat(); }
       };
@@ -703,7 +816,7 @@
     el.querySelectorAll('button[data-c]').forEach(b => b.onclick = () => {
       O.opts.colorBy = b.dataset.c;
       el.querySelectorAll('button[data-c]').forEach(x => x.classList.toggle('on', x === b));
-      if (O.tube) O.tube.material.uniforms.uMode.value = b.dataset.c === 'speed' ? 1 : 0;
+      if (O.pathMat) O.pathMat.uniforms.uMode.value = b.dataset.c === 'speed' ? 1 : 0;
     });
     el.querySelectorAll('button[data-t]').forEach(b => b.onclick = () => {
       const k = b.dataset.t; O.opts[k] = !O.opts[k];
@@ -719,17 +832,21 @@
     const file = document.createElement('input'); file.type = 'file'; file.accept = '.txt,text/plain'; file.style.display = 'none';
     el.appendChild(file);
     drop.onclick = () => file.click();
-    file.onchange = e => e.target.files[0] && e.target.files[0].text().then(t => { O.loadLog(t); stat(); });
+    file.onchange = e => e.target.files[0] && O.loadFile(e.target.files[0]);
     ['dragover', 'dragenter'].forEach(n => drop.addEventListener(n, e => { e.preventDefault(); drop.classList.add('hot'); }));
     ['dragleave', 'drop'].forEach(n => drop.addEventListener(n, e => { e.preventDefault(); drop.classList.remove('hot'); }));
     drop.addEventListener('drop', e => {
-      const f = e.dataTransfer.files[0]; if (f) f.text().then(t => { O.loadLog(t); stat(); });
+      const f = e.dataTransfer.files[0]; if (f) O.loadFile(f);
     });
   }
   function stat() {
     const s = document.getElementById('eqtrail-stat'); if (!s) return;
     const h = O.heatStats;
-    s.textContent = `${O.raw.length} locs · ${fmtDur(O.t1 - O.t0)} session` +
+    const zones = O.segments ? O.segments.length : 1;
+    s.textContent = `${O.raw.length} locs here` +
+      (O.totalPts && O.totalPts !== O.raw.length ? ` of ${O.totalPts} in ${zones} zones` : '') +
+      (O.runs > 1 ? ` · ${O.runs} runs` : '') +
+      (O.lone ? ` · ${O.lone} lone` : '') +
       (h ? ` · ${h.cells} cells · ${Math.round(h.cell * 10)} loc/cell` : '');
     renderTicks();
   }
