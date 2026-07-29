@@ -126,7 +126,7 @@ carries a position.</p>
 
 <pre><code>[Mon Jul 27 20:14:06 2026] Your Location is 8277.13, -2583.59, 126.62</code></pre>
 
-<p>Those three numbers are <b>north, east, up</b> — EQ prints Y first. Bind <code>/loc</code> to a
+<p>Those three numbers are <b>east, north, up</b> — X first. Bind <code>/loc</code> to a
 macro and let it fire while you play. <code>You have entered &lt;Zone&gt;.</code> lines are picked up
 too, and are used to split a session by zone and load the right map for you.</p>
 
@@ -160,7 +160,7 @@ and drawn over whatever zone is open.</p>
 
 <h2>The panel</h2>
 
-<img class="panelshot" src="panel.jpg" alt="The Trail control panel: playback scrubber, colour and heatmap sliders, and a legend labelled in minutes.">
+<img class="panelshot" src="panel.jpg" alt="The Trail control panel: playback scrubber, colour and heatmap sliders, hide-UI buttons, and a legend labelled in minutes.">
 
 <table>
   <tr><th>Control</th><th>What it does</th></tr>
@@ -174,7 +174,40 @@ and drawn over whatever zone is open.</p>
   <tr><td>relief</td><td><b>flat</b> paints the floor; higher extrudes the heat into a 3D relief</td></tr>
   <tr><td>weight</td><td><b>time</b> = seconds per cell · <b>visits</b> = number of samples</td></tr>
   <tr><td>layers</td><td>show or hide the path and the heat independently</td></tr>
+  <tr><td>stats</td><td>show or hide the Session panel</td></tr>
+  <tr><td>hide</td><td><b>trail UI</b> hides our panels · <b>all UI</b> also hides the site's own chrome</td></tr>
 </table>
+
+<p>Both panels <b>drag by their title bar</b>, and every setting — including where you left them —
+is saved in your browser as you change it. Nothing from the log is ever stored.</p>
+
+<div class="note">
+  <b>Recording something?</b> Press <code>Shift</code>+<code>H</code> and the site's header, footer
+  and controls disappear along with our panels, leaving the map filling the window.
+  <code>H</code> alone hides just the Trail panels. Press the same keys again to bring everything
+  back — and while anything is hidden, a small reminder of the key sits in the corner, fading out so
+  it stays out of your capture and returning the moment you move the mouse. Neither is remembered
+  after a reload.
+</div>
+
+<h2>The Session panel</h2>
+
+<p>Nine numbers counted straight out of the log, all of them counting up in step with the
+playback: <b>damage dealt</b>, <b>damage taken</b>, <b>kills</b>, <b>deaths</b>,
+<b>experience</b>, <b>levels</b>, <b>coin</b>, <b>items looted</b> and <b>distance travelled</b> —
+that last one measured from your own <code>/loc</code> track rather than from a line of text, which
+is why it agrees with the map.</p>
+
+<figure>
+  <img src="session.jpg" alt="The Session panel: nine stat cards above a chart with two cumulative curves and a playhead.">
+  <figcaption>Nine cards and the plot, part-way through a real session.</figcaption>
+</figure>
+
+<p>Click any card to add it to the plot underneath, or click it again to take it off. The curves are
+cumulative and get drawn as the playhead sweeps across, with the part you haven't reached yet left
+faint. Pick one metric and the axis is in that metric's own units; pick several and each is drawn as
+a share of its own session total, so a 50,000-damage curve and a 6-death curve can share one chart
+honestly.</p>
 
 <p>The colour bar is labelled in real units — minutes and seconds per cell, or sample counts in
 <b>visits</b> mode — so a colour you see on the map can be read off the scale.</p>

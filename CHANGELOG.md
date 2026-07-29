@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.3.0 — 2026-07-29
+
+### Fixed: /loc columns were the wrong way round
+
+Tracks drew rotated because the parser read `Your Location is A, B, C` as north-first. It is
+**east-first**. Settled by measurement: group every `/loc` by the zone it was logged in and test
+which assignment lands inside that zone's published bounds. Across two clients — EQ Legends and
+P1999 Green — east-first fits every zone with samples (8/8 and 8/8); north-first falls outside the
+map in 5 of 8 and 3 of 8. After the fix, 100% of a 3,526-sample real track lands inside the zone.
+
+`opts.swapXY` (and a **swap X/Y** button) flips it back for any client that really does print north
+first. The synthetic logs in `data/` were regenerated in the corrected order.
+
+### Added
+
+- **Session panel** — nine cards counted from the log (damage dealt/taken, kills, deaths,
+  experience, levels, coin, items looted, distance travelled) that count up in step with playback.
+  Click a card to add it to the plot; the cumulative curves are revealed as the playhead advances.
+  One series shows its own units, several show each as a share of its own total — never a second
+  y-axis. Hand-rolled SVG, because Manifest V3 forbids remote code and a bundled chart library
+  would outweigh the whole overlay.
+- **Both panels drag** by their title bar and remember where they were left.
+- **Hide UI** — `H` for our panels, `Shift`+`H` for the site's chrome as well, so the canvas fills
+  the window for a screen capture. A corner reminder of the key fades out to stay out of the
+  recording and returns on any mouse movement. Deliberately not persisted: a reload always restores
+  everything, so a hidden panel can never become a mystery.
+- **Settings persist** to `localStorage` as you change them — options, series selection and panel
+  positions. Nothing from the log is stored.
+
+### Fixed
+
+- `clear()` now tears down everything the script added — both panels, the reminder, the injected
+  stylesheets, the key handler and the animation loop. A second copy (an old install beside a new
+  one, or a console paste) wipes the previous one instead of stacking a dead panel on top of a live
+  one. Verified by injecting three times: exactly one of each survives.
+- A failed `setPointerCapture` no longer aborts a drag.
+
 ## 0.2.0 — 2026-07-28
 
 Tested against two real logs (121 MB / 1,573,716 lines / 26 `/loc`s, and 79 MB / 999,925 lines /

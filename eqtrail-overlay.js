@@ -12,7 +12,8 @@
  *
  *   1. COORDINATES. Their transform is the single source of truth:
  *          mesh.x = -east/10 ;  mesh.y = up/10 ;  mesh.z = north/10
- *      EQ's /loc prints "north, east, up" (Y first). We use __dbg.locToMesh when present.
+ *      /loc prints "east, north, up" — X FIRST, contrary to the usual folklore. See the note
+ *      above the parser for how that was measured. We use __dbg.locToMesh for the transform.
  *
  *   2. PARENTING. In the exploded ("floors pulled apart") view app.js lifts each floor band
  *      group: Z.groups[i].position.y = i * gap * lift. Anything added to the raw scene would
@@ -23,7 +24,7 @@
  * PUBLIC API
  *     EQTrail.loadFile(file)  stream a File (the drop path — use this for real, huge logs)
  *     EQTrail.loadLog(text)   same, from a string already in memory
- *     EQTrail.loadPoints(pts) [{t:<epoch seconds>, north, east, up}, ...] — skip the parser
+ *     EQTrail.loadPoints(pts) [{t:<epoch seconds>, east, north, up}, ...] — skip the parser
  *     EQTrail.useSegment(i)   switch to another zone found in the log
  *     EQTrail.play() / .pause() / .setT(0..1) / .clear() / .rebuild()
  *     EQTrail.opts            live-tunable options (see DEFAULTS)
@@ -73,6 +74,13 @@
     // straight line across the whole zone between two samples that have nothing to do with
     // each other. 5 minutes is long enough to keep a genuine run intact.
     gapBreak: 300,
+    // Escape hatch for a client that really does print /loc north-first. Off by default because
+    // every log measured so far prints east first; see the note above the parser.
+    swapXY: false,
+    // ---- statistics ----
+    // Which metrics are plotted. Two by default so the chart opens showing what it is FOR — a
+    // single curve looks like a decoration, two that diverge look like a question.
+    series: ['dmgOut', 'xp'],
   };
 
   // ============================ colour ramps ============================
@@ -96,41 +104,124 @@
   }
 
   // ============================ log parsing =============================
-  // EQ writes one bracketed timestamp per line. The only positional line vanilla EQ emits is
-  // /loc: "Your Location is <north>, <east>, <up>". Zone lines let us pick the right map.
+  // EQ writes one bracketed timestamp per line. The only positional line vanilla EQ emits is /loc.
+  //
+  // THE ORDER OF THOSE THREE NUMBERS IS "east, north, up" — X FIRST.
+  // This is worth stating loudly because the folklore (and the atlas's own source comment) says
+  // /loc prints Y first, and reading it that way puts the whole track sideways. It was settled by
+  // measurement, not argument: take every /loc in a log, group by the zone it was logged in, and
+  // check which assignment lands inside that zone's published bounds. Across two logs from two
+  // different clients — EQ Legends and P1999 Green — "east first" fits every zone with samples
+  // (8/8 and 8/8); "north first" falls outside the map in 5 of 8 and 3 of 8. If you ever meet a
+  // client that really does print north first, `opts.swapXY` flips it back without a code change.
   const RE_LINE = /^\[(\w{3}) (\w{3}) (\d{1,2}) (\d{2}):(\d{2}):(\d{2}) (\d{4})\]\s*(.*)$/;
   const RE_LOC  = /^Your Location is\s*(-?\d+(?:\.\d+)?)[,\s]+(-?\d+(?:\.\d+)?)[,\s]+(-?\d+(?:\.\d+)?)/i;
   const RE_ZONE = /^You have entered ([^.]+)\./i;
   const MON = { Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11 };
 
+  // ---------------------------- statistics ----------------------------
+  // What a log actually offers, by volume, from a real session: damage lines dominate, then
+  // faction, loot, experience, kills. These nine are the ones that are both common enough to make
+  // a curve and meaningful enough to care about. `dist` is the odd one out — it comes from the
+  // /loc track itself, not from a line, which is why the map and the chart agree about it.
+  const METRICS = [
+    { k: 'dmgOut', label: 'Damage dealt',  fmt: 'int'  },
+    { k: 'dmgIn',  label: 'Damage taken',  fmt: 'int'  },
+    { k: 'kills',  label: 'Kills',         fmt: 'int'  },
+    { k: 'deaths', label: 'Deaths',        fmt: 'int'  },
+    { k: 'xp',     label: 'Experience',    fmt: 'pct'  },
+    { k: 'levels', label: 'Levels',        fmt: 'int'  },
+    { k: 'coin',   label: 'Coin',          fmt: 'coin' },
+    { k: 'loot',   label: 'Items looted',  fmt: 'int'  },
+    { k: 'dist',   label: 'Distance',      fmt: 'dist' },
+  ];
+  // The dataviz reference's dark categorical slots, in its fixed order — validated against this
+  // panel's surface (#15122e): lightness band, chroma floor, CVD separation, contrast all pass.
+  // Worst adjacent CVD pair sits at ΔE 8.4, which is legal only with secondary encoding, so every
+  // plotted series also carries a direct label in the legend. Colour follows the METRIC, never the
+  // order it was picked in, so toggling one series never repaints the others.
+  const SERIES_HEX = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#9085e9'];
+
+  const RE_DMG  = /for (\d+) points? of damage/;
+  const RE_HURT = /^You hurt yourself for (\d+) point/;
+  const RE_XP   = /^You gain (?:party )?experience!(?:\s*\(([\d.]+)%\))?/;
+  const RE_COIN = /^You receive (.+?) from the corpse/;
+  const DENOM = { copper: 1, silver: 10, gold: 100, platinum: 1000 };
+  function coinToCopper(s) {
+    let c = 0;
+    const parts = s.match(/(\d+)\s*(platinum|gold|silver|copper)/g) || [];
+    for (const p of parts) { const m = /(\d+)\s*(\w+)/.exec(p); c += +m[1] * (DENOM[m[2]] || 0); }
+    return c;
+  }
+
+  function bump(ev, k, t, v) {
+    if (!k) return;                      // an unattributed damage line — count it nowhere rather than wrongly
+    const a = ev[k] || (ev[k] = { t: [], v: [] }); a.t.push(t); a.v.push(v);
+  }
+
   // One line of a log. Cheap `indexOf` guards come FIRST: a real log is overwhelmingly combat
-  // spam — 1.5 million lines for 26 /locs is a normal ratio — and running two regexes over every
-  // one of them is the difference between a snappy parse and a hung tab.
-  function eatLine(raw, out, zones) {
+  // spam — 1.5 million lines for 26 /locs is a normal ratio — and running regexes over every one
+  // of them is the difference between a snappy parse and a hung tab. The outer gate is that every
+  // line we care about names the player, as "You"/"Your" or as the target "YOU"; that one test
+  // rejects the mob-on-mob and ambient chatter that makes up most of a busy log.
+  function eatLine(raw, out, zones, ev) {
     const isLoc = raw.indexOf('Your Location is') >= 0;
-    if (!isLoc && raw.indexOf('You have entered') < 0) return;
+    const isZone = !isLoc && raw.indexOf('You have entered') >= 0;
+    if (!isLoc && !isZone && raw.indexOf('You') < 0 && raw.indexOf('YOU') < 0) return;
     const m = RE_LINE.exec(raw.charCodeAt(raw.length - 1) === 13 ? raw.slice(0, -1) : raw);
     if (!m) return;
     const t = Date.UTC(+m[7], MON[m[2]], +m[3], +m[4], +m[5], +m[6]) / 1000;
+    const b = m[8];
     if (isLoc) {
-      const l = RE_LOC.exec(m[8]);
-      if (l) out.push({ t, north: +l[1], east: +l[2], up: +l[3] });
-    } else {
-      const z = RE_ZONE.exec(m[8]);
+      const l = RE_LOC.exec(b);
+      if (l) out.push({ t, east: +l[1], north: +l[2], up: +l[3] });   // east first — see above
+      return;
+    }
+    if (isZone) {
+      const z = RE_ZONE.exec(b);
       if (z) zones.push({ t, name: z[1].trim() });
+      return;
+    }
+    if (!ev) return;
+    if (b.indexOf('points of damage') >= 0 || b.indexOf('point of damage') >= 0) {
+      const d = RE_DMG.exec(b);
+      // "YOU" in caps is how EQ marks the player as the TARGET of a swing; anything else starting
+      // with "You " is the player swinging. That single distinction splits the whole combat log.
+      if (d) bump(ev, b.indexOf(' YOU for ') >= 0 ? 'dmgIn' : (b.lastIndexOf('You ', 0) === 0 ? 'dmgOut' : null), t, +d[1]);
+      return;
+    }
+    if (b.lastIndexOf('You have slain', 0) === 0) { bump(ev, 'kills', t, 1); return; }
+    if (b.lastIndexOf('You have been slain', 0) === 0) { bump(ev, 'deaths', t, 1); return; }
+    if (b.indexOf('experience') >= 0) {
+      const x = RE_XP.exec(b);
+      if (x) bump(ev, 'xp', t, x[1] ? +x[1] : 0);
+      return;
+    }
+    if (b.lastIndexOf('You have gained a level', 0) === 0) { bump(ev, 'levels', t, 1); return; }
+    if (b.indexOf('from the corpse') >= 0) {
+      const c = RE_COIN.exec(b);
+      if (c) bump(ev, 'coin', t, coinToCopper(c[1]));
+      return;
+    }
+    if (b.indexOf('looted') >= 0 && /^(?:--)?You (?:have )?looted /.test(b)) { bump(ev, 'loot', t, 1); return; }
+    if (b.lastIndexOf('You hurt yourself', 0) === 0) {
+      const h = RE_HURT.exec(b);
+      if (h) bump(ev, 'dmgIn', t, +h[1]);
     }
   }
 
-  function finish(out, zones) {
+  function finish(out, zones, ev) {
     out.sort((a, b) => a.t - b.t);
     spreadWithinSecond(out);
-    return { pts: out, zones };
+    // Event arrays come out of the file in log order, which is chronological — no sort needed,
+    // and sorting parallel arrays of half a million entries is not free.
+    return { pts: out, zones, ev };
   }
 
   function parseLog(text) {
-    const out = [], zones = [];
-    for (const raw of text.split('\n')) eatLine(raw, out, zones);
-    return finish(out, zones);
+    const out = [], zones = [], ev = {};
+    for (const raw of text.split('\n')) eatLine(raw, out, zones, ev);
+    return finish(out, zones, ev);
   }
 
   // Real logs are enormous — 121 MB and 1.5 million lines is an ordinary one. Reading that with
@@ -140,7 +231,7 @@
   async function parseFile(file, onProgress) {
     const CHUNK = 4 << 20;                       // 4 MiB — big enough to be cheap, small enough to yield
     const dec = new TextDecoder('utf-8');
-    const out = [], zones = [];
+    const out = [], zones = [], ev = {};
     let carry = '';
     for (let off = 0; off < file.size; off += CHUNK) {
       const buf = await file.slice(off, off + CHUNK).arrayBuffer();
@@ -148,12 +239,12 @@
       const text = carry + dec.decode(new Uint8Array(buf), { stream: true });
       const lines = text.split('\n');
       carry = lines.pop();                       // last element is a partial line (or '')
-      for (let i = 0; i < lines.length; i++) eatLine(lines[i], out, zones);
+      for (let i = 0; i < lines.length; i++) eatLine(lines[i], out, zones, ev);
       if (onProgress) onProgress(Math.min(1, (off + CHUNK) / file.size));
       await new Promise(r => setTimeout(r, 0));  // hand the frame back so playback keeps running
     }
-    if (carry) eatLine(carry, out, zones);
-    return finish(out, zones);
+    if (carry) eatLine(carry, out, zones, ev);
+    return finish(out, zones, ev);
   }
 
   // EQ stamps every log line to the SECOND. A /loc macro that fires faster than that (or a burst
@@ -213,7 +304,10 @@
   }
 
   // ============================= geometry ===============================
-  const locToMesh = D.locToMesh || ((e, n, u) => new T.Vector3(-e / 10, u / 10, n / 10));
+  const rawToMesh = D.locToMesh || ((e, n, u) => new T.Vector3(-e / 10, u / 10, n / 10));
+  // Every sample reaches the scene through here, so the swap has exactly one place to live.
+  const locToMesh = (east, north, up) =>
+    O.opts.swapXY ? rawToMesh(north, east, up) : rawToMesh(east, north, up);
 
   function liveSplits(Z) {
     const lad = Z.atlas.ladder && Z.atlas.ladder[Z.rung];
@@ -367,6 +461,7 @@
     tubes: [],          // one per unbroken run of samples; all share O.pathMat
     tube: null, pathMat: null, heat: null, head: null, beam: null,
     t0: 0, t1: 1, u: 1, playing: false, _raf: 0, _last: 0,
+    ev: {}, stats: null, pos: {}, hidden: { ours: false, site: false }, statsOpen: true,
   };
 
   function detach() {
@@ -381,10 +476,23 @@
     O.tube = O.pathMat = O.heat = O.head = O.beam = null;
   }
 
+  // Tear down EVERYTHING this script added. Called on close, and — importantly — by the next copy
+  // of the script at the top of the file. A userscript and the extension can both be installed, an
+  // old install can linger beside a new one, and the console path can be pasted twice; whatever the
+  // route, the newest copy wipes the previous one so there is only ever one panel, one key handler
+  // and one animation loop. Miss anything here and you get two stacked panels where only the
+  // buried one responds — which is precisely how this was found.
   O.clear = function () {
     O.playing = false; cancelAnimationFrame(O._raf);
-    detach(); O.raw = [];
-    const p = document.getElementById('eqtrail-panel'); if (p) p.remove();
+    clearTimeout(O._peekT); clearTimeout(saveTimer);
+    detach(); O.raw = []; O.ev = {}; O.stats = null;
+    removeEventListener('keydown', onKey);
+    removeEventListener('pointermove', flashPeek);
+    for (const id of ['eqtrail-panel', 'eqtrail-stats', 'eqtrail-peek']) {
+      const e = document.getElementById(id); if (e) e.remove();
+    }
+    document.querySelectorAll('style[data-eqtrail]').forEach(e => e.remove());
+    document.documentElement.classList.remove('eqt-hide-ours', 'eqt-hide-site');
     window.EQTrail = null;
   };
 
@@ -409,7 +517,8 @@
     return accept(parsed);
   };
 
-  function accept({ pts, zones }) {
+  function accept({ pts, zones, ev }) {
+    O.ev = ev || {};
     if (!pts.length) {
       note('No "Your Location is" lines in that file — is the /loc macro actually firing, and is ' +
            'this the right eqlog_*.txt?');
@@ -445,6 +554,7 @@
       note(s.name ? `No atlas zone matches "${s.name}" — drawing on the zone you have open.`
                   : 'Log has no zone line before these /locs — drawing on the zone you have open.');
     } else { note(''); }
+    buildStats();
     O.rebuild();
     O.setT(0); O.play();
   };
@@ -645,6 +755,7 @@
     }
     const sc = document.getElementById('eqtrail-scrub');
     if (sc && document.activeElement !== sc) sc.value = String(Math.round(O.u * 1000));
+    if (O.statsOpen && O._updateStats) O._updateStats(tNow);
   }
 
   O.setT = function (u) { O.u = Math.min(1, Math.max(0, u)); applyU(); };
@@ -664,6 +775,276 @@
     O._raf = requestAnimationFrame(tick);
   };
   function syncBtn() { const b = document.getElementById('eqtrail-play'); if (b) b.textContent = O.playing ? '⏸' : '▶'; }
+
+  // ======================= stats: scope + curves ========================
+  // The cards and the chart show the SAME window the map is showing: the active zone segment's
+  // time range. Anything else and the playhead would be scrubbing one timeline while the numbers
+  // counted a different one.
+  //
+  // Each metric becomes a pair of parallel arrays — sample times and a running total — so the
+  // value at any playback moment is one binary search, cheap enough to run every frame.
+  function buildStats() {
+    O.stats = null;
+    if (!O.raw || !O.raw.length) return;
+    const t0 = O.raw[0].t, t1 = O.raw[O.raw.length - 1].t;
+    const S = {};
+    for (const m of METRICS) {
+      if (m.k === 'dist') continue;
+      const a = O.ev && O.ev[m.k];
+      if (!a || !a.t.length) continue;
+      const ts = [], cum = [];
+      let run = 0;
+      for (let i = 0; i < a.t.length; i++) {
+        const t = a.t[i];
+        if (t < t0) continue;
+        if (t > t1) break;                 // log order is chronological, so we're past the window
+        run += a.v[i];
+        ts.push(t); cum.push(run);
+      }
+      if (ts.length) S[m.k] = { t: ts, cum, total: run };
+    }
+    // Distance is derived from the track rather than the text — and it respects the same gap break
+    // the ribbon uses, so a five-day pause is not silently counted as a sprint across the zone.
+    {
+      const ts = [], cum = [];
+      let run = 0;
+      for (let i = 1; i < O.raw.length; i++) {
+        const a = O.raw[i - 1], b = O.raw[i];
+        if (b.t - a.t <= O.opts.gapBreak) {
+          const dx = b.east - a.east, dy = b.north - a.north, dz = b.up - a.up;
+          run += Math.sqrt(dx * dx + dy * dy + dz * dz);
+        }
+        ts.push(b.t); cum.push(run);
+      }
+      if (ts.length) S.dist = { t: ts, cum, total: run };
+    }
+    O.stats = { S, t0, t1 };
+    renderCards();
+  }
+
+  // Running total at time t — the last sample at or before it.
+  function valueAt(series, t) {
+    if (!series || !series.t.length || t < series.t[0]) return 0;
+    let lo = 0, hi = series.t.length - 1;
+    while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (series.t[mid] <= t) lo = mid; else hi = mid - 1; }
+    return series.cum[lo];
+  }
+
+  function fmtVal(kind, v) {
+    if (kind === 'coin') {                       // copper is the storage unit; platinum is the read
+      if (v >= 1000) return (v / 1000).toFixed(v >= 10000 ? 0 : 1) + 'p';
+      if (v >= 100) return (v / 100).toFixed(1) + 'g';
+      if (v >= 10) return (v / 10).toFixed(1) + 's';
+      return Math.round(v) + 'c';
+    }
+    if (kind === 'pct') return v >= 100 ? (v / 100).toFixed(1) + ' lvl' : v.toFixed(1) + '%';
+    if (kind === 'dist') return v >= 10000 ? (v / 1000).toFixed(1) + 'k' : Math.round(v).toString();
+    if (v >= 1000000) return (v / 1000000).toFixed(1) + 'M';
+    if (v >= 10000) return (v / 1000).toFixed(1) + 'k';
+    return Math.round(v).toLocaleString();
+  }
+
+  // ============================ the chart ===============================
+  // Hand-rolled SVG rather than a charting library: the extension build is Manifest V3, which
+  // forbids remote code, and a bundled d3 would be an order of magnitude more bytes than the whole
+  // overlay for one line chart. This does what is actually needed — cumulative curves revealed in
+  // step with playback — in about a hundred lines.
+  const CHART = { w: 300, h: 116, padL: 6, padR: 6, padT: 8, padB: 16 };
+
+  function seriesColor(k) {                      // colour follows the METRIC, never the pick order
+    return SERIES_HEX[METRICS.findIndex(m => m.k === k) % SERIES_HEX.length];
+  }
+
+  function drawChart(tNow) {
+    const svg = document.getElementById('eqtrail-chart');
+    if (!svg || !O.stats) return;
+    const picked = O.opts.series.filter(k => O.stats.S[k]);
+    const { t0, t1 } = O.stats, span = Math.max(1, t1 - t0);
+    const X = t => CHART.padL + (CHART.w - CHART.padL - CHART.padR) * ((t - t0) / span);
+    const innerH = CHART.h - CHART.padT - CHART.padB;
+
+    if (!picked.length) {
+      svg.innerHTML = `<text x="${CHART.w / 2}" y="${CHART.h / 2}" fill="#6d6590" font-size="11"
+        text-anchor="middle">click a card to plot it</text>`;
+      return;
+    }
+    // ONE axis, always. Series of wildly different magnitude (50,000 damage next to 6 deaths)
+    // cannot share an absolute scale, and a second y-axis is never the answer — so with more than
+    // one series each is drawn as a share of ITS OWN session total and the axis says so. With a
+    // single series the axis is that metric's real units.
+    const norm = picked.length > 1;
+    const maxOf = k => Math.max(1e-9, O.stats.S[k].total);
+    const parts = [];
+
+    // grid + axis labels
+    const yTicks = norm ? [0, 0.5, 1] : [0, 0.5, 1];
+    for (const g of yTicks) {
+      const y = CHART.padT + innerH * (1 - g);
+      parts.push(`<line x1="${CHART.padL}" y1="${y}" x2="${CHART.w - CHART.padR}" y2="${y}" stroke="#2c2545" stroke-width="1"/>`);
+      const lbl = norm ? Math.round(g * 100) + '%' : fmtVal(METRICS.find(m => m.k === picked[0]).fmt, g * maxOf(picked[0]));
+      if (g > 0) parts.push(`<text x="${CHART.padL + 2}" y="${y - 2}" fill="#6d6590" font-size="9">${lbl}</text>`);
+    }
+
+    for (const k of picked) {
+      const s = O.stats.S[k], mx = maxOf(k), col = seriesColor(k);
+      const Y = v => CHART.padT + innerH * (1 - (norm ? v / mx : v / mx));
+      // Sample the running total on a fixed pixel grid — the underlying series can be half a
+      // million events long and none of that detail survives 300 pixels anyway.
+      const N = 160;
+      let d = '', dFuture = '', started = false;
+      for (let i = 0; i <= N; i++) {
+        const t = t0 + span * (i / N);
+        const x = X(t), y = Y(valueAt(s, t));
+        if (t <= tNow) { d += (started ? 'L' : 'M') + x.toFixed(1) + ' ' + y.toFixed(1); started = true; }
+        else dFuture += (dFuture ? 'L' : 'M') + x.toFixed(1) + ' ' + y.toFixed(1);
+      }
+      if (dFuture) parts.push(`<path d="${dFuture}" fill="none" stroke="${col}" stroke-width="1.5" opacity="0.18"/>`);
+      if (d) parts.push(`<path d="${d}" fill="none" stroke="${col}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`);
+    }
+    // the playhead, shared with the map
+    const px = X(Math.min(t1, Math.max(t0, tNow)));
+    parts.push(`<line x1="${px}" y1="${CHART.padT - 4}" x2="${px}" y2="${CHART.h - CHART.padB}" stroke="#9fe8ff" stroke-width="1" opacity="0.8"/>`);
+    parts.push(`<text x="${CHART.padL}" y="${CHART.h - 4}" fill="#6d6590" font-size="9">${fmtClock(t0)}</text>`);
+    parts.push(`<text x="${CHART.w - CHART.padR}" y="${CHART.h - 4}" fill="#6d6590" font-size="9" text-anchor="end">${fmtClock(t1)}</text>`);
+    parts.push(`<text x="${CHART.w / 2}" y="${CHART.h - 4}" fill="#6d6590" font-size="9" text-anchor="middle">${
+      norm ? 'share of each metric’s session total' : METRICS.find(m => m.k === picked[0]).label}</text>`);
+    svg.innerHTML = parts.join('');
+  }
+  const fmtClock = t => new Date(t * 1000).toISOString().slice(11, 16);
+
+  // ======================= settings persistence =========================
+  // Every knob is saved as you move it, so the panel comes back the way it was left. Only the
+  // OPTIONS and panel positions are stored — never anything from the log itself, which stays in
+  // the tab it was dropped into and is never written anywhere.
+  const LS_KEY = 'eqtrail.settings.v1';
+  let saveTimer = 0;
+  function saveSettings() {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      try {
+        localStorage.setItem(LS_KEY, JSON.stringify({ opts: O.opts, pos: O.pos, statsOpen: O.statsOpen }));
+      } catch (e) { /* private mode, quota — a lost preference is not worth an error */ }
+    }, 250);
+  }
+  function loadSettings() {
+    try {
+      const raw = localStorage.getItem(LS_KEY);
+      if (!raw) return {};
+      const s = JSON.parse(raw) || {};
+      // Merge over DEFAULTS rather than replacing: a saved blob from an older version must not
+      // delete options added since, and a corrupt key must not take the panel down.
+      if (s.opts) for (const k of Object.keys(DEFAULTS)) if (k in s.opts) O.opts[k] = s.opts[k];
+      if (!Array.isArray(O.opts.series)) O.opts.series = DEFAULTS.series.slice();
+      O.opts.series = O.opts.series.filter(k => METRICS.some(m => m.k === k));
+      if (s.pos && typeof s.pos === 'object') O.pos = s.pos;
+      if (typeof s.statsOpen === 'boolean') O.statsOpen = s.statsOpen;
+      return s;
+    } catch (e) { return {}; }
+  }
+
+  // ========================= draggable panels ===========================
+  // The atlas owns the right-hand column and the bottom hint bar; wherever we park a panel it is
+  // in someone's way on some window size. Let the reader move it, and remember where they put it.
+  function makeDraggable(el, handle, key) {
+    handle.style.cursor = 'move';
+    handle.addEventListener('pointerdown', e => {
+      if (e.target.closest('button, select, input')) return;   // controls in the header still work
+      const r = el.getBoundingClientRect();
+      const dx = e.clientX - r.left, dy = e.clientY - r.top;
+      // Capture keeps the drag alive when the pointer outruns the panel, but it throws if the
+      // pointer id is not active (synthetic events, some pen/touch stacks). The drag works without
+      // it, so never let a failed capture abort the whole gesture.
+      try { handle.setPointerCapture(e.pointerId); } catch (err) {}
+      const move = ev => {
+        // Clamp so a panel can never be dragged fully off-screen and stranded there.
+        const x = Math.min(Math.max(0, ev.clientX - dx), innerWidth - 40);
+        const y = Math.min(Math.max(0, ev.clientY - dy), innerHeight - 30);
+        el.style.left = x + 'px'; el.style.top = y + 'px';
+        el.style.right = 'auto'; el.style.bottom = 'auto';
+        O.pos[key] = { x, y };
+      };
+      const up = ev => {
+        try { handle.releasePointerCapture(e.pointerId); } catch (err) {}
+        handle.removeEventListener('pointermove', move);
+        handle.removeEventListener('pointerup', up);
+        saveSettings();
+      };
+      handle.addEventListener('pointermove', move);
+      handle.addEventListener('pointerup', up);
+      e.preventDefault();
+    });
+  }
+  function applyPos(el, key) {
+    const p = O.pos[key];
+    if (!p) return;
+    el.style.left = Math.min(p.x, innerWidth - 40) + 'px';
+    el.style.top = Math.min(p.y, innerHeight - 30) + 'px';
+    el.style.right = 'auto'; el.style.bottom = 'auto';
+  }
+
+  // ============================== hide UI ===============================
+  // Two levels, because they answer different questions. "Trail" hides only what we added — for
+  // looking at the map itself. "All" also hides the site's own chrome and lets the canvas fill the
+  // window, which is what you want when recording. Neither is persisted: a reload always brings
+  // everything back, so a hidden panel can never become a mystery.
+  const SITE_CHROME = ['header.eq-header', 'footer.eq-footer', '#panel', '#wikidock', '#keys',
+                       '#worldLegend', '#stage .hud', '#stage #hint'];
+  const HIDE_CSS = `
+    html.eqt-hide-site ${SITE_CHROME.join(', html.eqt-hide-site ')} { display: none !important; }
+    html.eqt-hide-site #atlas { display: block !important; padding: 0 !important; margin: 0 !important;
+      max-width: none !important; width: 100vw !important; height: 100vh !important; }
+    html.eqt-hide-site #stage { width: 100vw !important; height: 100vh !important; border-radius: 0 !important; }
+    html.eqt-hide-site body { overflow: hidden !important; margin: 0 !important; }
+    html.eqt-hide-ours #eqtrail-panel, html.eqt-hide-ours #eqtrail-stats { display: none !important; }
+    #eqtrail-peek{position:fixed;left:10px;bottom:10px;z-index:100000;
+      font:11px/1.4 ui-sans-serif,system-ui,sans-serif;color:#cfc7ea;
+      background:rgba(14,12,24,.9);border:1px solid #3a3350;border-radius:8px;
+      padding:7px 10px;pointer-events:none;transition:opacity .5s ease;box-shadow:0 4px 14px rgba(0,0,0,.5)}
+    #eqtrail-peek.dim{opacity:0;}
+    #eqtrail-peek b{color:#9fe8ff;font-family:ui-monospace,monospace}
+    html:not(.eqt-hide-site):not(.eqt-hide-ours) #eqtrail-peek{display:none}`;
+
+  function setHidden(ours, site) {
+    const r = document.documentElement;
+    r.classList.toggle('eqt-hide-ours', !!ours);
+    r.classList.toggle('eqt-hide-site', !!site);
+    O.hidden = { ours: !!ours, site: !!site };
+    let peek = document.getElementById('eqtrail-peek');
+    if (!ours && !site) { if (peek) peek.remove(); return; }
+    if (!peek) { peek = document.createElement('div'); peek.id = 'eqtrail-peek'; document.body.appendChild(peek); }
+    peek.innerHTML = site ? 'All UI hidden — press <b>Shift</b>+<b>H</b> to bring it back'
+                          : 'Trail panel hidden — press <b>H</b> to bring it back';
+    // Fade the reminder out so it never sits in a recording, but leave it in the DOM: moving the
+    // mouse brings it back, so the way out is always one gesture away.
+    peek.classList.remove('dim');
+    clearTimeout(O._peekT);
+    O._peekT = setTimeout(() => peek.classList.add('dim'), 4000);
+  }
+  function flashPeek() {
+    const peek = document.getElementById('eqtrail-peek');
+    if (!peek) return;
+    peek.classList.remove('dim');
+    clearTimeout(O._peekT);
+    O._peekT = setTimeout(() => peek.classList.add('dim'), 2500);
+  }
+  O.setHidden = setHidden;
+
+  function onKey(e) {
+    // Never steal a key from a text field, and never from the atlas's own shortcuts — it uses
+    // WASD/QE/FG/ZX/CV and Shift; H is free.
+    const el = document.activeElement;
+    if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key === 'h' || e.key === 'H') {
+      e.preventDefault();
+      if (e.shiftKey) {
+        const on = !(O.hidden && O.hidden.site);
+        setHidden(on, on);                       // "all" implies ours
+      } else {
+        setHidden(!(O.hidden && O.hidden.ours), O.hidden && O.hidden.site);
+      }
+    }
+  }
 
   // ============================== panel =================================
   const CSS = `
@@ -702,7 +1083,9 @@
   #eqtrail-drop{margin-top:9px;border:1px dashed #4a4070;border-radius:7px;padding:9px;text-align:center;
     color:#8d85ab;font-size:11px;cursor:pointer}
   #eqtrail-drop.hot{border-color:#7c6fe0;color:#cfc7ea;background:#221c3a}
-  #eqtrail-stat{margin-top:7px;font:10px ui-monospace,monospace;color:#7d7495}`;
+  #eqtrail-stat{margin-top:7px;font:10px ui-monospace,monospace;color:#7d7495}
+  .eqt-keyhint{margin-top:7px;font-size:10px;color:#6d6590;line-height:1.4}
+  .eqt-keyhint b{color:#9fe8ff;font-family:ui-monospace,monospace;font-weight:600}`;
 
   function gradCss(name) {
     const s = []; for (let i = 0; i <= 8; i++) { const c = ramp(name, i / 8); s.push(`rgb(${(c[0]*255)|0},${(c[1]*255)|0},${(c[2]*255)|0})`); }
@@ -766,7 +1149,8 @@
   }
 
   function buildPanel() {
-    const st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st);
+    const st = document.createElement('style'); st.dataset.eqtrail = '1';
+    st.textContent = CSS + HIDE_CSS; document.head.appendChild(st);
     const el = document.createElement('div'); el.id = 'eqtrail-panel';
     el.innerHTML = `<h4>Trail <span id="eqtrail-x" title="close">×</span></h4><div id="eqtrail-body">
       <div id="eqtrail-hud"></div>
@@ -794,6 +1178,13 @@
       <div class="eqt-scale"><div class="eqt-bar" style="background:${heatBarCss()}"></div>
         <div class="eqt-ticks" id="eqtrail-ticks"></div>
         <div class="eqt-cap" id="eqtrail-cap"></div></div>
+      <div class="eqt-row"><label>panels</label>
+        <button id="eqtrail-statsbtn" class="on">stats</button>
+        <button data-o="swapXY">swap X/Y</button></div>
+      <div class="eqt-row"><label>hide</label>
+        <button id="eqtrail-hideours">trail UI</button>
+        <button id="eqtrail-hideall">all UI</button></div>
+      <div class="eqt-keyhint">hidden? press <b>H</b> for the panels, <b>Shift</b>+<b>H</b> for everything</div>
       <div id="eqtrail-drop">drop an eqlog_*.txt here</div>
       <div id="eqtrail-stat"></div></div>`;
     document.body.appendChild(el);
@@ -811,23 +1202,44 @@
         else if (k === 'future' && O.pathMat) O.pathMat.uniforms.uFuture.value = v;
         else if (k === 'heatOpacity' && O.heat) O.heat.material.opacity = v;
         else if (k === 'cell' || k === 'relief') { O.rebuild(); stat(); }
+        saveSettings();
       };
     });
     el.querySelectorAll('button[data-c]').forEach(b => b.onclick = () => {
       O.opts.colorBy = b.dataset.c;
       el.querySelectorAll('button[data-c]').forEach(x => x.classList.toggle('on', x === b));
       if (O.pathMat) O.pathMat.uniforms.uMode.value = b.dataset.c === 'speed' ? 1 : 0;
+      saveSettings();
     });
     el.querySelectorAll('button[data-t]').forEach(b => b.onclick = () => {
       const k = b.dataset.t; O.opts[k] = !O.opts[k];
-      b.classList.toggle('on', O.opts[k]); O.rebuild();
+      b.classList.toggle('on', O.opts[k]); O.rebuild(); saveSettings();
     });
     el.querySelectorAll('button[data-w]').forEach(b => b.onclick = () => {
       O.opts.heatBy = b.dataset.w;
       el.querySelectorAll('button[data-w]').forEach(x => x.classList.toggle('on', x === b));
-      O.rebuild();
+      O.rebuild(); saveSettings();
     });
     el.querySelector('#eqtrail-seg').onchange = e => O.useSegment(+e.target.value);
+    el.querySelector('#eqtrail-statsbtn').onclick = () => O.toggleStats();
+    el.querySelector('#eqtrail-hideours').onclick = () => setHidden(true, O.hidden.site);
+    el.querySelector('#eqtrail-hideall').onclick = () => setHidden(true, true);
+    el.querySelectorAll('button[data-o]').forEach(b => b.onclick = () => {
+      const k = b.dataset.o; O.opts[k] = !O.opts[k];
+      b.classList.toggle('on', O.opts[k]);
+      saveSettings(); buildStats(); O.rebuild();
+    });
+    makeDraggable(el, el.querySelector('h4'), 'panel');
+    applyPos(el, 'panel');
+    // Any pointer movement while something is hidden re-shows the way out.
+    addEventListener('pointermove', flashPeek, { passive: true });
+    // Toggle buttons are written into the markup with a fixed default 'on'; restore them from the
+    // saved options so a reload does not silently disagree with what the map is doing.
+    el.querySelectorAll('button[data-c]').forEach(x => x.classList.toggle('on', x.dataset.c === O.opts.colorBy));
+    el.querySelectorAll('button[data-w]').forEach(x => x.classList.toggle('on', x.dataset.w === O.opts.heatBy));
+    el.querySelectorAll('button[data-t]').forEach(x => x.classList.toggle('on', !!O.opts[x.dataset.t]));
+    el.querySelectorAll('button[data-o]').forEach(x => x.classList.toggle('on', !!O.opts[x.dataset.o]));
+    syncStatsBtn();
     const drop = el.querySelector('#eqtrail-drop');
     const file = document.createElement('input'); file.type = 'file'; file.accept = '.txt,text/plain'; file.style.display = 'none';
     el.appendChild(file);
@@ -839,8 +1251,28 @@
       const f = e.dataTransfer.files[0]; if (f) O.loadFile(f);
     });
   }
+  // Push O.opts back into the controls. The panel is generated from the options, so it starts
+  // truthful — but anything that changes an option WITHOUT going through a control (the console,
+  // a restored setting, a future preset) would leave the widgets describing a state the map is no
+  // longer in. Cheap enough to just re-assert after every rebuild.
+  function syncControls() {
+    const el = document.getElementById('eqtrail-panel'); if (!el) return;
+    el.querySelectorAll('input[type=range][data-k]').forEach(r => {
+      const k = r.dataset.k, v = O.opts[k];
+      if (document.activeElement !== r) r.value = String(v);
+      const out = el.querySelector(`[data-v="${k}"]`);
+      if (out) out.textContent =
+        k === 'speed' ? v + '×' : k === 'cell' ? v : k === 'relief' ? (v == 0 ? 'flat' : v) : Math.round(v * 100) + '%';
+    });
+    el.querySelectorAll('button[data-c]').forEach(x => x.classList.toggle('on', x.dataset.c === O.opts.colorBy));
+    el.querySelectorAll('button[data-w]').forEach(x => x.classList.toggle('on', x.dataset.w === O.opts.heatBy));
+    el.querySelectorAll('button[data-t]').forEach(x => x.classList.toggle('on', !!O.opts[x.dataset.t]));
+    el.querySelectorAll('button[data-o]').forEach(x => x.classList.toggle('on', !!O.opts[x.dataset.o]));
+  }
+
   function stat() {
     const s = document.getElementById('eqtrail-stat'); if (!s) return;
+    syncControls();
     const h = O.heatStats;
     const zones = O.segments ? O.segments.length : 1;
     s.textContent = `${O.raw.length} locs here` +
@@ -852,7 +1284,111 @@
   }
   O._stat = stat;
 
+  // =========================== stats panel ==============================
+  const STATS_CSS = `
+  #eqtrail-stats{position:fixed;left:14px;top:96px;z-index:9999;width:326px;
+    font:12px/1.45 ui-sans-serif,system-ui,sans-serif;color:#e8e6f2;
+    background:rgba(14,12,24,.93);border:1px solid #3a3350;border-radius:10px;
+    box-shadow:0 10px 30px rgba(0,0,0,.55);backdrop-filter:blur(6px);overflow:hidden}
+  #eqtrail-stats h4{margin:0;padding:9px 11px;font-size:12px;letter-spacing:.09em;text-transform:uppercase;
+    background:linear-gradient(90deg,#221c3a,#16122a);border-bottom:1px solid #3a3350;color:#bdb4e6;
+    display:flex;justify-content:space-between;align-items:center}
+  #eqtrail-stats h4 span{cursor:pointer;color:#7d7495;font-size:14px}
+  #eqtrail-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:10px}
+  .eqt-card{background:#1a1533;border:1px solid #2c2545;border-left:3px solid #2c2545;
+    border-radius:7px;padding:6px 8px;cursor:pointer;transition:background .12s ease}
+  .eqt-card:hover{background:#241d40}
+  .eqt-card.on{background:#241d40}
+  .eqt-card .v{font:600 15px/1.2 ui-monospace,monospace;color:#e8e6f2}
+  .eqt-card .l{font-size:9.5px;color:#8d85ab;letter-spacing:.02em;margin-top:1px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .eqt-card.dead{opacity:.35;cursor:default}
+  #eqtrail-chartwrap{padding:0 10px 6px}
+  #eqtrail-chart{display:block;width:100%;height:116px;background:#120f26;
+    border:1px solid #2c2545;border-radius:7px}
+  #eqtrail-legend{display:flex;flex-wrap:wrap;gap:9px;padding:2px 11px 11px;font-size:10.5px;color:#9d95bb}
+  #eqtrail-legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+  #eqtrail-shint{padding:0 11px 10px;font-size:10px;color:#6d6590}`;
+
+  function statsPanel() {
+    const st = document.createElement('style'); st.dataset.eqtrail = '1';
+    st.textContent = STATS_CSS; document.head.appendChild(st);
+    const el = document.createElement('div'); el.id = 'eqtrail-stats';
+    el.innerHTML = `<h4>Session <span id="eqtrail-sx" title="close">×</span></h4>
+      <div id="eqtrail-cards"></div>
+      <div id="eqtrail-chartwrap">
+        <svg id="eqtrail-chart" viewBox="0 0 ${CHART.w} ${CHART.h}" preserveAspectRatio="none"></svg>
+      </div>
+      <div id="eqtrail-legend"></div>
+      <div id="eqtrail-shint">click a card to add or remove it from the plot</div>`;
+    document.body.appendChild(el);
+    el.querySelector('#eqtrail-sx').onclick = () => { O.statsOpen = false; el.style.display = 'none'; saveSettings(); syncStatsBtn(); };
+    makeDraggable(el, el.querySelector('h4'), 'stats');
+    applyPos(el, 'stats');
+    if (!O.statsOpen) el.style.display = 'none';
+  }
+
+  // Cards are rebuilt only when the DATA changes; their numbers are updated in place every frame.
+  function renderCards() {
+    const box = document.getElementById('eqtrail-cards');
+    if (!box) return;
+    box.innerHTML = METRICS.map(m => {
+      const has = O.stats && O.stats.S[m.k];
+      const on = O.opts.series.indexOf(m.k) >= 0;
+      const col = seriesColor(m.k);
+      return `<div class="eqt-card${has ? '' : ' dead'}${on && has ? ' on' : ''}" data-k="${m.k}"
+        style="border-left-color:${on && has ? col : '#2c2545'}">
+        <div class="v" data-v="${m.k}">—</div><div class="l">${m.label}</div></div>`;
+    }).join('');
+    box.querySelectorAll('.eqt-card:not(.dead)').forEach(c => c.onclick = () => {
+      const k = c.dataset.k, i = O.opts.series.indexOf(k);
+      if (i >= 0) O.opts.series.splice(i, 1);
+      else if (O.opts.series.length < SERIES_HEX.length) O.opts.series.push(k);
+      saveSettings(); renderCards(); updateStats(O.t0 + (O.t1 - O.t0) * O.u);
+    });
+    renderLegend();
+  }
+  function renderLegend() {
+    const lg = document.getElementById('eqtrail-legend');
+    if (!lg) return;
+    const picked = O.opts.series.filter(k => O.stats && O.stats.S[k]);
+    // A legend is always present for two or more series, and each entry is a direct label — which
+    // is also what makes the palette's tightest CVD pair legal.
+    lg.innerHTML = picked.map(k =>
+      `<span><i style="background:${seriesColor(k)}"></i>${METRICS.find(m => m.k === k).label}</span>`).join('');
+  }
+
+  // Called every frame from applyU: the cards count up and the curves grow with the playhead.
+  function updateStats(tNow) {
+    if (!O.stats) return;
+    for (const m of METRICS) {
+      const cell = document.querySelector(`#eqtrail-cards [data-v="${m.k}"]`);
+      if (!cell) continue;
+      const s = O.stats.S[m.k];
+      cell.textContent = s ? fmtVal(m.fmt, valueAt(s, tNow)) : '—';
+    }
+    drawChart(tNow);
+  }
+  O._updateStats = updateStats;
+
+  function syncStatsBtn() {
+    const b = document.getElementById('eqtrail-statsbtn');
+    if (b) b.classList.toggle('on', !!O.statsOpen);
+  }
+  O.toggleStats = function () {
+    O.statsOpen = !O.statsOpen;
+    const el = document.getElementById('eqtrail-stats');
+    if (el) el.style.display = O.statsOpen ? '' : 'none';
+    saveSettings(); syncStatsBtn();
+    if (O.statsOpen) updateStats(O.t0 + (O.t1 - O.t0) * O.u);
+  };
+
+  // ================================ boot ================================
+  loadSettings();
   buildPanel();
+  statsPanel();
+  renderCards();
+  addEventListener('keydown', onKey);
   window.EQTrail = O;
-  console.log('[EQTrail] ready — EQTrail.loadLog(text) or drop a log on the panel');
+  console.log('[EQTrail] ready — drop a log on the panel. H hides the panels, Shift+H hides all UI.');
 })();

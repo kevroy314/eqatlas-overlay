@@ -55,9 +55,38 @@ Drop `eqlog_<Character>_<server>.txt` onto the panel (or click it to browse). Th
 | **relief** | `flat` paints the floor; higher extrudes the heat into a 3D relief |
 | **weight** | **time** = seconds spent per cell · **visits** = number of `/loc` samples |
 | **layers** | show/hide the path and the heat independently |
+| **stats** | show or hide the Session panel |
+| **swap X/Y** | flip the `/loc` column order, for a client that prints north first |
+| **hide** | `trail UI` hides our panels · `all UI` also hides the site's chrome for recording |
 
 The colour bar under the heat controls is labelled in real units — minutes and seconds per cell, or
 sample counts in `visits` mode.
+
+Both panels **drag by their title bar**, and every setting — including where you parked them — is
+saved to `localStorage` as you change it. Nothing from the log is ever stored; it stays in the tab
+you dropped it into.
+
+**Hotkeys.** `H` hides and restores the Trail panels; `Shift`+`H` also hides the site's own header,
+footer and controls so the map fills the window for a screen capture. Neither is remembered across a
+reload, and while anything is hidden a small reminder of the key sits in the corner — it fades out so
+it stays out of a recording, and any mouse movement brings it back.
+
+## The Session panel
+
+![the Session panel](docs/session.jpg)
+
+Nine cards, counted from the log and animated in step with playback: **damage dealt**, **damage
+taken**, **kills**, **deaths**, **experience**, **levels**, **coin**, **items looted**, and
+**distance travelled** — the last derived from the `/loc` track itself rather than from a log line,
+which is why it agrees with the map.
+
+Click any card to add or remove it from the plot below. The curves are cumulative and are revealed
+as the playhead advances, with the not-yet-reached part drawn faint. With one series selected the
+axis is that metric's own units; with several, each is drawn as a share of **its own** session total
+and the axis says so — a second y-axis would be the wrong answer to "50,000 damage next to 6 deaths".
+
+The chart is hand-rolled SVG, not a charting library: the extension build is Manifest V3, which
+forbids remote code, and bundling one would cost more bytes than the entire overlay.
 
 ![heatmap painted flat on the terrain](docs/heatmap-flat.jpg)
 
@@ -71,8 +100,14 @@ The only line that carries a position is the one `/loc` prints:
 [Mon Jul 27 20:14:06 2026] Your Location is 8277.13, -2583.59, 126.62
 ```
 
-Those three numbers are **north, east, up** — EQ prints Y first. `You have entered <Zone>.` lines are
-used to split a session by zone and pick the right map.
+Those three numbers are **east, north, up** — X first. This contradicts the usual folklore (and the
+atlas's own source comment), so it was settled by measurement rather than argument: group every
+`/loc` by the zone it was logged in, and check which assignment lands inside that zone's published
+bounds. Across two logs from two different clients — EQ Legends and P1999 Green — "east first" fits
+every zone with samples (8/8 and 8/8) while "north first" falls outside the map in 5 of 8 and 3 of 8.
+`opts.swapXY`, or the **swap X/Y** button, flips it for any client that really does print north first.
+
+`You have entered <Zone>.` lines are used to split a session by zone and pick the right map.
 
 **You do not need to log time separately.** Every line EQ writes is already timestamped, and that
 bracket *is* the time series. The macro only has to emit `/loc`.

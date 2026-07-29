@@ -2,7 +2,8 @@
 """Synthesize an EverQuest log for Ocean of Tears with a plausible /loc-spam track.
 
 Output mimics eqlog_<char>_<server>.txt: a bracketed timestamp per line, and
-`Your Location is <north>, <east>, <up>` for /loc — EQ prints Y (north) first.
+`Your Location is <east>, <north>, <up>` for /loc — X first, which is what real logs from both
+EQ Legends and P1999 actually print (verified against published zone bounds; see eqtrail-overlay.js).
 Mesh<->loc per eqltools atlas/app.js: mesh.x = -east/10, mesh.y = up/10, mesh.z = north/10.
 """
 import json, math, random, datetime
@@ -81,7 +82,7 @@ lines = ['[%s] You have entered Ocean of Tears.' % start.strftime('%a %b %d %H:%
 for (tt, x, y, z) in pts:
     ts = (start + datetime.timedelta(seconds=tt)).strftime('%a %b %d %H:%M:%S %Y')
     north, east, up = z * 10, -x * 10, y * 10
-    lines.append(f'[{ts}] Your Location is {north:.2f}, {east:.2f}, {up:.2f}')
+    lines.append(f'[{ts}] Your Location is {east:.2f}, {north:.2f}, {up:.2f}')
     if random.random() < 0.012:
         lines.append(f'[{ts}] You have slain a sea turtle!')
 
