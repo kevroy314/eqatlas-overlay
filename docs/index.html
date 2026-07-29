@@ -173,7 +173,7 @@ and drawn over whatever zone is open.</p>
   <tr><td>cell</td><td>heatmap bin size</td></tr>
   <tr><td>relief</td><td><b>flat</b> paints the floor; higher extrudes the heat into a 3D relief</td></tr>
   <tr><td>weight</td><td><b>time</b> = seconds per cell · <b>visits</b> = number of samples</td></tr>
-  <tr><td>layers</td><td>show or hide the path and the heat independently</td></tr>
+  <tr><td>layers</td><td>show or hide the path, the heat, and the death markers independently</td></tr>
   <tr><td>stats</td><td>show or hide the Session panel</td></tr>
   <tr><td>hide</td><td><b>trail UI</b> hides our panels · <b>all UI</b> also hides the site's own chrome</td></tr>
 </table>
@@ -216,6 +216,16 @@ honestly.</p>
 
 <p>The colour bar is labelled in real units — minutes and seconds per cell, or sample counts in
 <b>visits</b> mode — so a colour you see on the map can be read off the scale.</p>
+
+<figure>
+  <img src="gravestone.jpg" alt="A pale headstone with a cross standing among trees on an island, with the trail and heatmap around it.">
+  <figcaption>A death, marked where the <code>/loc</code> track says you were standing.</figcaption>
+</figure>
+
+<p>A <b>gravestone</b> marks every death, appearing as the playback reaches it. Where it stands
+comes from your own <code>/loc</code> track at that moment — and if there is no <code>/loc</code>
+anywhere near the death, no stone is placed rather than one guessed into the wrong spot; the panel
+tells you how many were left out.</p>
 
 <figure>
   <img src="heatmap-flat.jpg" alt="An island with the heatmap painted flat across the terrain, magenta at the edges and yellow-white at the centre.">

@@ -54,7 +54,7 @@ Drop `eqlog_<Character>_<server>.txt` onto the panel (or click it to browse). Th
 | **cell** | heatmap bin size |
 | **relief** | `flat` paints the floor; higher extrudes the heat into a 3D relief |
 | **weight** | **time** = seconds spent per cell · **visits** = number of `/loc` samples |
-| **layers** | show/hide the path and the heat independently |
+| **layers** | show/hide the path, the heat, and the death markers independently |
 | **stats** | show or hide the Session panel |
 | **swap X/Y** | flip the `/loc` column order, for a client that prints north first |
 | **hide** | `trail UI` hides our panels · `all UI` also hides the site's chrome for recording |
@@ -95,6 +95,14 @@ The chart is hand-rolled SVG, not a charting library: the extension build is Man
 forbids remote code, and bundling one would cost more bytes than the entire overlay.
 
 ![heatmap painted flat on the terrain](docs/heatmap-flat.jpg)
+
+![a gravestone marking a death](docs/gravestone.jpg)
+
+A **gravestone** marks each death, appearing as playback reaches it. Its position comes from the
+`/loc` track at that timestamp: close samples are interpolated, distant ones are not — the stone
+stays on the last known sample rather than inventing a spot halfway to wherever you went next, and
+if the nearest sample is further off than `gapBreak` no stone is placed and the panel says how many
+were unplaceable. A confident marker in the wrong place is worse than no marker.
 
 ---
 

@@ -92,6 +92,7 @@
         // Escape hatch for a client that really does print /loc north-first. Off by default because
         // every log measured so far prints east first; see the note above the parser.
         swapXY: false,
+        gravesOn: true,         // a headstone at each death, revealed as playback reaches it
         // ---- statistics ----
         // Which metrics are plotted. Two by default so the chart opens showing what it is FOR — a
         // single curve looks like a decoration, two that diverge look like a question.
@@ -491,18 +492,19 @@
         tubes: [],          // one per unbroken run of samples; all share O.pathMat
         tube: null, pathMat: null, heat: null, head: null, beam: null,
         t0: 0, t1: 1, u: 1, playing: false, _raf: 0, _last: 0,
-        ev: {}, stats: null, pos: {}, hidden: { ours: false, site: false }, statsOpen: true,
+        ev: {}, stats: null, graves: [], pos: {}, hidden: { ours: false, site: false }, statsOpen: true,
       };
 
       function detach() {
-        for (const o of [...O.tubes, O.heat, O.head, O.beam]) {
+        for (const o of [...O.tubes, ...(O.graves || []), O.heat, O.head, O.beam]) {
           if (o && o.parent) o.parent.remove(o);
           if (o && o.geometry) o.geometry.dispose();
         }
+        for (const g of O.graves || []) if (g.material) g.material.dispose();
         // The tubes SHARE one material — dispose it once, not once per run.
         if (O.pathMat) O.pathMat.dispose();
         for (const o of [O.heat, O.head, O.beam]) if (o && o.material) o.material.dispose();
-        O.tubes = []; O.runs = 0; O.lone = 0;
+        O.tubes = []; O.graves = []; O.runs = 0; O.lone = 0; O.gravesSkipped = 0;
         O.tube = O.pathMat = O.heat = O.head = O.beam = null;
       }
 
@@ -676,6 +678,7 @@
 
         // ---- 2. the dwell heatmap ----
         if (o.heatOn) buildHeat(Z, S, dts, scaleR); else O.heatStats = null;
+        buildGraves(Z, scaleR);
 
         applyU();
         stat();
@@ -762,16 +765,37 @@
       }
 
       // ============================ playback ================================
+      // Index of the last /loc sample at or before t (binary search — the scrubber can jump).
+      function sampleIndexAt(t) {
+        let lo = 0, hi = O.raw.length - 1;
+        while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (O.raw[mid].t <= t) lo = mid; else hi = mid - 1; }
+        return lo;
+      }
+
+      // Where were you at time t? Interpolates between the surrounding samples when they are close
+      // together. When they are NOT — the macro stopped, or you died and stood still — interpolating
+      // across the gap would invent a position halfway to wherever you went next, so we stay put on the
+      // last known sample instead. `null` when the nearest sample is further off than gapBreak: better
+      // to place no marker than a confident one in the wrong place.
+      function posAt(t, tolerate) {
+        if (!O.raw.length) return null;
+        const i = sampleIndexAt(t);
+        const a = O.raw[i], b = O.raw[Math.min(O.raw.length - 1, i + 1)];
+        if (tolerate != null && Math.abs(t - a.t) > tolerate && Math.abs(b.t - t) > tolerate) return null;
+        const gap = b.t - a.t;
+        const k = (gap > 0 && gap <= 30) ? (t - a.t) / gap : 0;
+        return locToMesh(a.east + (b.east - a.east) * k,
+                         a.north + (b.north - a.north) * k,
+                         a.up + (b.up - a.up) * k);
+      }
+
       function applyU() {
         if (O.pathMat) O.pathMat.uniforms.uHead.value = O.u;
         if (!O.raw.length) return;
         const tNow = O.t0 + (O.t1 - O.t0) * O.u;
-        // walk to the sample at/just before tNow (binary search — the scrubber can jump)
-        let lo = 0, hi = O.raw.length - 1;
-        while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (O.raw[mid].t <= tNow) lo = mid; else hi = mid - 1; }
-        const a = O.raw[lo], b = O.raw[Math.min(O.raw.length - 1, lo + 1)];
-        const k = b.t > a.t ? (tNow - a.t) / (b.t - a.t) : 0;
-        const p = locToMesh(a.east + (b.east - a.east) * k, a.north + (b.north - a.north) * k, a.up + (b.up - a.up) * k);
+        const a = O.raw[sampleIndexAt(tNow)];
+        const p = posAt(tNow);
+        updateGraves(tNow);
         if (O.head) { O.head.position.copy(p); O.head.position.y += O.opts.yLift; O.head.visible = O.opts.pathOn; }
         if (O.beam && D.Z) {
           const bb = D.Z.atlas.bounds, pa = O.beam.geometry.attributes.position;
@@ -805,6 +829,80 @@
         O._raf = requestAnimationFrame(tick);
       };
       function syncBtn() { const b = document.getElementById('eqtrail-play'); if (b) b.textContent = O.playing ? '⏸' : '▶'; }
+
+      // ============================ gravestones =============================
+      // One marker per death, placed where the /loc track says you were standing, revealed in step with
+      // playback so a death shows up as the trail reaches it.
+      //
+      // Drawn as a Sprite from a canvas texture rather than as geometry: a sprite always faces the
+      // camera, so the icon stays legible from any orbit angle, and SpriteMaterial is one of three's own
+      // materials — which means it already carries the logarithmic-depth chunks this renderer requires.
+      // A hand-written shader here would silently vanish behind the terrain, the same trap the trail hit.
+      let graveTex = null;
+      function graveTexture() {
+        if (graveTex) return graveTex;
+        const S = 64, c = document.createElement('canvas');
+        c.width = c.height = S;
+        const g = c.getContext('2d');
+        // A rounded-top headstone with a cross, drawn once. Pale stone with a dark outline so it reads
+        // against both grass and the near-black sky, plus a soft shadow so it does not look pasted on.
+        g.clearRect(0, 0, S, S);
+        g.translate(S / 2, S / 2);
+        const w = 22, h = 26, r = 11;
+        g.beginPath();
+        g.moveTo(-w / 2, h / 2);
+        g.lineTo(-w / 2, -h / 2 + r);
+        g.arc(0, -h / 2 + r, r, Math.PI, 0);
+        g.lineTo(w / 2, h / 2);
+        g.closePath();
+        g.fillStyle = 'rgba(0,0,0,0.55)';
+        g.save(); g.translate(1.5, 2); g.fill(); g.restore();   // shadow
+        g.fillStyle = '#d8d4e4'; g.fill();
+        g.lineWidth = 2.5; g.strokeStyle = '#2a2438'; g.stroke();
+        g.strokeStyle = '#4a4360'; g.lineWidth = 3;              // the cross
+        g.beginPath();
+        g.moveTo(0, -13); g.lineTo(0, 4);
+        g.moveTo(-6, -6); g.lineTo(6, -6);
+        g.stroke();
+        graveTex = new T.CanvasTexture(c);
+        graveTex.colorSpace = T.SRGBColorSpace;                  // canvas pixels are sRGB, not linear
+        return graveTex;
+      }
+
+      function buildGraves(Z, scaleR) {
+        O.graves = [];
+        const ev = O.ev && O.ev.deaths;
+        if (!ev || !ev.t.length || !O.opts.gravesOn) return;
+        const t0 = O.raw[0].t, t1 = O.raw[O.raw.length - 1].t;
+        let skipped = 0;
+        for (let i = 0; i < ev.t.length; i++) {
+          const t = ev.t[i];
+          if (t < t0 || t > t1) continue;                        // a death in another zone's visit
+          const p = posAt(t, O.opts.gapBreak);
+          if (!p) { skipped++; continue; }                       // no nearby /loc — placement unknowable
+          const mat = new T.SpriteMaterial({
+            map: graveTexture(), transparent: true, depthWrite: false,
+            clippingPlanes: bandClip(Z, p.y), sizeAttenuation: true, toneMapped: false,
+          });
+          const sp = new T.Sprite(mat);
+          const r = Math.max(1.6, Z.span * 0.011);               // one apparent size across zone scales
+          sp.scale.set(r, r, 1);
+          sp.position.set(p.x, p.y + r * 0.55 + O.opts.yLift * scaleR, p.z);   // stand it ON the ground
+          sp.renderOrder = 997;
+          sp.visible = false;
+          sp.userData.t = t;
+          bandGroupForY(Z, p.y).add(sp);
+          O.graves.push(sp);
+        }
+        O.gravesSkipped = skipped;
+      }
+
+      // Reveal each stone as the playhead passes its moment. Cheap enough to just re-assert every frame.
+      function updateGraves(tNow) {
+        if (!O.graves) return;
+        const on = O.opts.gravesOn;
+        for (const sp of O.graves) sp.visible = on && sp.userData.t <= tNow;
+      }
 
       // ======================= stats: scope + curves ========================
       // The cards and the chart show the SAME window the map is showing: the active zone segment's
@@ -1261,7 +1359,8 @@
           <div class="eqt-row"><label>weight</label>
             <button data-w="time" class="on">time</button><button data-w="visits">visits</button></div>
           <div class="eqt-row"><label>layers</label>
-            <button data-t="pathOn" class="on">path</button><button data-t="heatOn" class="on">heat</button></div>
+            <button data-t="pathOn" class="on">path</button><button data-t="heatOn" class="on">heat</button>
+            <button data-t="gravesOn" class="on">deaths</button></div>
           <div class="eqt-scale"><div class="eqt-bar" style="background:${heatBarCss()}"></div>
             <div class="eqt-ticks" id="eqtrail-ticks"></div>
             <div class="eqt-cap" id="eqtrail-cap"></div></div>
@@ -1365,6 +1464,15 @@
         s.textContent = `${O.raw.length} locs here` +
           (O.totalPts && O.totalPts !== O.raw.length ? ` of ${O.totalPts} in ${zones} zones` : '') +
           (O.runs > 1 ? ` · ${O.runs} runs` : '') +
+          // Say something self-explanatory in all three cases. "5 deaths, none placeable" is the one
+          // that matters: a sparse log can easily have deaths in this zone with no /loc within
+          // gapBreak of any of them, and silence there looks like a bug rather than missing data.
+          (() => {
+            const n = (O.graves || []).length, sk = O.gravesSkipped || 0;
+            if (!n && !sk) return '';
+            if (!n) return ` · ${sk} death${sk === 1 ? '' : 's'}, none placeable`;
+            return ` · ${n} death${n === 1 ? '' : 's'}` + (sk ? ` (${sk} unplaceable)` : '');
+          })() +
           (O.lone ? ` · ${O.lone} lone` : '') +
           (h ? ` · ${h.cells} cells · ${Math.round(h.cell * 10)} loc/cell` : '');
         renderTicks();

@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.5.0 — 2026-07-29
+
+- **Gravestones at each death**, revealed in step with playback so a death appears as the trail
+  reaches it. Toggle with **deaths** in the layers row; on by default.
+- Placement comes from the `/loc` track at the death's timestamp. Where the surrounding samples are
+  close together it interpolates; where they are not — the macro stopped, or you died and stood
+  still — it stays on the last known sample rather than inventing a spot halfway to wherever you
+  went next. If the nearest sample is further off than `gapBreak`, no stone is placed at all and the
+  panel says how many were unplaceable, because a confident marker in the wrong place is worse than
+  no marker. Measured across the test logs: 6 of 6 placed in one, and 5 deaths with no nearby `/loc`
+  correctly placed as none at all in another, where the panel reads "5 deaths, none placeable" —
+  silence there would look like a bug rather than missing data.
+- Drawn as a camera-facing sprite from a canvas texture. Deliberately one of three's own materials:
+  `SpriteMaterial` already carries the logarithmic-depth chunks this renderer requires, and a
+  hand-written shader would silently vanish behind the terrain — the same trap the trail hit in 0.1.
+
 ## 0.4.0 — 2026-07-29
 
 - **Accuracy and Evasion**, from the swings the log records: 7,488 landed vs 3,705 missed on the
