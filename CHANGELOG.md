@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.0 — 2026-07-29
+
+- **Accuracy and Evasion**, from the swings the log records: 7,488 landed vs 3,705 missed on the
+  way out, 3,615 vs 3,146 coming in, in one real session. Both are running ratios, so they settle
+  as the session goes on rather than twitching per fight.
+- They plot into **their own band** under the main chart rather than onto a second y-axis. Two
+  scales side by side make every crossing point look like a relationship when the crossing is
+  really an artifact of the ranges you happened to pick. Percentages already share a natural,
+  self-describing 0–100% axis, so the ratios share one axis with each other and none with the
+  cumulative curves. The band appears only when a ratio is selected.
+
 ## 0.3.0 — 2026-07-29
 
 ### Fixed: /loc columns were the wrong way round

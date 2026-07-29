@@ -75,15 +75,21 @@ it stays out of a recording, and any mouse movement brings it back.
 
 ![the Session panel](docs/session.jpg)
 
-Nine cards, counted from the log and animated in step with playback: **damage dealt**, **damage
-taken**, **kills**, **deaths**, **experience**, **levels**, **coin**, **items looted**, and
+Eleven cards, counted from the log and animated in step with playback: **damage dealt**, **damage
+taken**, **kills**, **deaths**, **experience**, **levels**, **coin**, **items looted**,
 **distance travelled** — the last derived from the `/loc` track itself rather than from a log line,
-which is why it agrees with the map.
+which is why it agrees with the map — plus **accuracy** and **evasion**, the share of swings that
+landed, going out and coming in.
 
 Click any card to add or remove it from the plot below. The curves are cumulative and are revealed
 as the playhead advances, with the not-yet-reached part drawn faint. With one series selected the
 axis is that metric's own units; with several, each is drawn as a share of **its own** session total
 and the axis says so — a second y-axis would be the wrong answer to "50,000 damage next to 6 deaths".
+
+**Accuracy and evasion get their own band** beneath the chart rather than a second y-axis. Two
+scales side by side make every crossing point read as a relationship when it is really an artifact
+of the ranges chosen; percentages already share a natural 0–100% axis, so the ratios share one axis
+with each other and none with the cumulative curves. The band appears only when a ratio is selected.
 
 The chart is hand-rolled SVG, not a charting library: the extension build is Manifest V3, which
 forbids remote code, and bundling one would cost more bytes than the entire overlay.

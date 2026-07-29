@@ -134,6 +134,14 @@
     { k: 'coin',   label: 'Coin',          fmt: 'coin' },
     { k: 'loot',   label: 'Items looted',  fmt: 'int'  },
     { k: 'dist',   label: 'Distance',      fmt: 'dist' },
+    // RATIOS. These two are not sums, so they never belong on the cumulative axis — a percentage
+    // and a damage total share no scale. They are also not a reason to add a SECOND y-axis to the
+    // main chart: two scales side by side make every crossing point look like a relationship, and
+    // the crossing is an artifact of whatever ranges you happened to choose. Percentages already
+    // have a natural, self-describing 0–100% scale, so they get their own band underneath with a
+    // single axis they genuinely share.
+    { k: 'acc',    label: 'Accuracy',      fmt: 'ratio', ratio: ['hitOut', 'missOut'] },
+    { k: 'eva',    label: 'Evasion',       fmt: 'ratio', ratio: ['missIn', 'hitIn'] },
   ];
   // The dataviz reference's dark categorical slots, in its fixed order — validated against this
   // panel's surface (#15122e): lightness band, chroma floor, CVD separation, contrast all pass.
@@ -187,9 +195,16 @@
       const d = RE_DMG.exec(b);
       // "YOU" in caps is how EQ marks the player as the TARGET of a swing; anything else starting
       // with "You " is the player swinging. That single distinction splits the whole combat log.
-      if (d) bump(ev, b.indexOf(' YOU for ') >= 0 ? 'dmgIn' : (b.lastIndexOf('You ', 0) === 0 ? 'dmgOut' : null), t, +d[1]);
+      if (d) {
+        const inbound = b.indexOf(' YOU for ') >= 0;
+        const k = inbound ? 'dmgIn' : (b.lastIndexOf('You ', 0) === 0 ? 'dmgOut' : null);
+        bump(ev, k, t, +d[1]);
+        if (k) bump(ev, inbound ? 'hitIn' : 'hitOut', t, 1);   // the swing itself, for the ratios
+      }
       return;
     }
+    if (b.lastIndexOf('You try to ', 0) === 0) { bump(ev, 'missOut', t, 1); return; }
+    if (b.indexOf(' tries to ') >= 0 && b.indexOf(' YOU, but ') >= 0) { bump(ev, 'missIn', t, 1); return; }
     if (b.lastIndexOf('You have slain', 0) === 0) { bump(ev, 'kills', t, 1); return; }
     if (b.lastIndexOf('You have been slain', 0) === 0) { bump(ev, 'deaths', t, 1); return; }
     if (b.indexOf('experience') >= 0) {
@@ -788,8 +803,10 @@
     if (!O.raw || !O.raw.length) return;
     const t0 = O.raw[0].t, t1 = O.raw[O.raw.length - 1].t;
     const S = {};
-    for (const m of METRICS) {
-      if (m.k === 'dist') continue;
+    // The raw counters behind the ratios are built like any other series, then divided.
+    for (const m of METRICS.map(x => x.k).concat(['hitOut', 'missOut', 'hitIn', 'missIn'])
+                           .filter(k => k !== 'dist' && k !== 'acc' && k !== 'eva')
+                           .map(k => ({ k }))) {
       const a = O.ev && O.ev[m.k];
       if (!a || !a.t.length) continue;
       const ts = [], cum = [];
@@ -830,7 +847,21 @@
     return series.cum[lo];
   }
 
+  // A ratio is "of everything so far", to match every other number on the panel being a running
+  // total. It settles as the session goes on rather than twitching per fight — which is the honest
+  // reading of "how often did I connect", and the only one that is stable with sparse data.
+  function ratioAt(m, t) {
+    const S = O.stats && O.stats.S;
+    if (!S) return null;
+    const a = S[m.ratio[0]], b = S[m.ratio[1]];
+    if (!a && !b) return null;
+    const x = a ? valueAt(a, t) : 0, y = b ? valueAt(b, t) : 0;
+    return (x + y) > 0 ? x / (x + y) : null;
+  }
+  const hasRatio = m => !!(m.ratio && O.stats && (O.stats.S[m.ratio[0]] || O.stats.S[m.ratio[1]]));
+
   function fmtVal(kind, v) {
+    if (kind === 'ratio') return v == null ? '—' : Math.round(v * 100) + '%';
     if (kind === 'coin') {                       // copper is the storage unit; platinum is the read
       if (v >= 1000) return (v / 1000).toFixed(v >= 10000 ? 0 : 1) + 'p';
       if (v >= 100) return (v / 100).toFixed(1) + 'g';
@@ -858,7 +889,9 @@
   function drawChart(tNow) {
     const svg = document.getElementById('eqtrail-chart');
     if (!svg || !O.stats) return;
-    const picked = O.opts.series.filter(k => O.stats.S[k]);
+    const M = k => METRICS.find(m => m.k === k);
+    const picked = O.opts.series.filter(k => !M(k).ratio && O.stats.S[k]);
+    drawBand(tNow);
     const { t0, t1 } = O.stats, span = Math.max(1, t1 - t0);
     const X = t => CHART.padL + (CHART.w - CHART.padL - CHART.padR) * ((t - t0) / span);
     const innerH = CHART.h - CHART.padT - CHART.padB;
@@ -911,6 +944,45 @@
     svg.innerHTML = parts.join('');
   }
   const fmtClock = t => new Date(t * 1000).toISOString().slice(11, 16);
+
+  // The ratio band: its own strip, its own single 0–100% axis, shared by every ratio because they
+  // genuinely share those units. Hidden entirely when no ratio is selected, so it costs nothing.
+  const BAND = { w: CHART.w, h: 58, padL: 6, padR: 6, padT: 8, padB: 13 };
+  function drawBand(tNow) {
+    const svg = document.getElementById('eqtrail-band');
+    if (!svg || !O.stats) return;
+    const picked = O.opts.series.map(k => METRICS.find(m => m.k === k)).filter(m => m.ratio && hasRatio(m));
+    svg.style.display = picked.length ? '' : 'none';
+    if (!picked.length) return;
+    const { t0, t1 } = O.stats, span = Math.max(1, t1 - t0);
+    const X = t => BAND.padL + (BAND.w - BAND.padL - BAND.padR) * ((t - t0) / span);
+    const innerH = BAND.h - BAND.padT - BAND.padB;
+    const Y = r => BAND.padT + innerH * (1 - r);
+    const parts = [];
+    for (const g of [0, 0.5, 1]) {
+      parts.push(`<line x1="${BAND.padL}" y1="${Y(g)}" x2="${BAND.w - BAND.padR}" y2="${Y(g)}" stroke="#2c2545" stroke-width="1"/>`);
+    }
+    parts.push(`<text x="${BAND.padL + 2}" y="${Y(1) + 7}" fill="#6d6590" font-size="8">100%</text>`);
+    for (const m of picked) {
+      const col = seriesColor(m.k);
+      const N = 120;
+      let d = '', f = '';
+      for (let i = 0; i <= N; i++) {
+        const t = t0 + span * (i / N), r = ratioAt(m, t);
+        if (r == null) continue;                       // no swings yet — draw nothing, don't imply 0%
+        const seg = (t <= tNow ? d : f);
+        const cmd = (seg ? 'L' : 'M') + X(t).toFixed(1) + ' ' + Y(r).toFixed(1);
+        if (t <= tNow) d += cmd; else f += cmd;
+      }
+      if (f) parts.push(`<path d="${f}" fill="none" stroke="${col}" stroke-width="1.5" opacity="0.18"/>`);
+      if (d) parts.push(`<path d="${d}" fill="none" stroke="${col}" stroke-width="2" stroke-linejoin="round"/>`);
+    }
+    const px = X(Math.min(t1, Math.max(t0, tNow)));
+    parts.push(`<line x1="${px}" y1="${BAND.padT - 3}" x2="${px}" y2="${BAND.h - BAND.padB}" stroke="#9fe8ff" stroke-width="1" opacity="0.8"/>`);
+    parts.push(`<text x="${BAND.w / 2}" y="${BAND.h - 3}" fill="#6d6590" font-size="9" text-anchor="middle">${
+      picked.map(m => m.label).join(' · ')} — share of swings so far</text>`);
+    svg.innerHTML = parts.join('');
+  }
 
   // ======================= settings persistence =========================
   // Every knob is saved as you move it, so the panel comes back the way it was left. Only the
@@ -1306,6 +1378,8 @@
   #eqtrail-chartwrap{padding:0 10px 6px}
   #eqtrail-chart{display:block;width:100%;height:116px;background:#120f26;
     border:1px solid #2c2545;border-radius:7px}
+  #eqtrail-band{display:block;width:100%;height:58px;background:#120f26;
+    border:1px solid #2c2545;border-top:0;border-radius:0 0 7px 7px;margin-top:-1px}
   #eqtrail-legend{display:flex;flex-wrap:wrap;gap:9px;padding:2px 11px 11px;font-size:10.5px;color:#9d95bb}
   #eqtrail-legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px}
   #eqtrail-shint{padding:0 11px 10px;font-size:10px;color:#6d6590}`;
@@ -1318,6 +1392,7 @@
       <div id="eqtrail-cards"></div>
       <div id="eqtrail-chartwrap">
         <svg id="eqtrail-chart" viewBox="0 0 ${CHART.w} ${CHART.h}" preserveAspectRatio="none"></svg>
+        <svg id="eqtrail-band" viewBox="0 0 ${BAND.w} ${BAND.h}" preserveAspectRatio="none" style="display:none"></svg>
       </div>
       <div id="eqtrail-legend"></div>
       <div id="eqtrail-shint">click a card to add or remove it from the plot</div>`;
@@ -1333,7 +1408,7 @@
     const box = document.getElementById('eqtrail-cards');
     if (!box) return;
     box.innerHTML = METRICS.map(m => {
-      const has = O.stats && O.stats.S[m.k];
+      const has = m.ratio ? hasRatio(m) : (O.stats && O.stats.S[m.k]);
       const on = O.opts.series.indexOf(m.k) >= 0;
       const col = seriesColor(m.k);
       return `<div class="eqt-card${has ? '' : ' dead'}${on && has ? ' on' : ''}" data-k="${m.k}"
@@ -1351,7 +1426,10 @@
   function renderLegend() {
     const lg = document.getElementById('eqtrail-legend');
     if (!lg) return;
-    const picked = O.opts.series.filter(k => O.stats && O.stats.S[k]);
+    const picked = O.opts.series.filter(k => {
+      const m = METRICS.find(x => x.k === k);
+      return m.ratio ? hasRatio(m) : (O.stats && O.stats.S[k]);
+    });
     // A legend is always present for two or more series, and each entry is a direct label — which
     // is also what makes the palette's tightest CVD pair legal.
     lg.innerHTML = picked.map(k =>
@@ -1364,6 +1442,7 @@
     for (const m of METRICS) {
       const cell = document.querySelector(`#eqtrail-cards [data-v="${m.k}"]`);
       if (!cell) continue;
+      if (m.ratio) { cell.textContent = fmtVal('ratio', ratioAt(m, tNow)); continue; }
       const s = O.stats.S[m.k];
       cell.textContent = s ? fmtVal(m.fmt, valueAt(s, tNow)) : '—';
     }
