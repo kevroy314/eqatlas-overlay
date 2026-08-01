@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Panels &amp; hotkeys — EQ Trail wiki</title>
+<meta name="description" content="Moving things out of the way, hiding everything for a recording, and what gets remembered.">
+<link rel="stylesheet" href="wiki.css">
+</head>
+<body>
+<div class="shell">
+<nav class="side">
+  <a class="brand" href="index.html">EQ&nbsp;Trail<span>.</span></a>
+  <div class="tag">wiki</div>
+  <div class="cols">
+    <h5>Start here</h5>
+    <a href="index.html">Overview</a>
+    <a href="install.html">Install & update</a>
+    <a href="logs.html">Your log file</a>
+    <h5>The map</h5>
+    <a href="trail.html">The trail</a>
+    <a href="heatmap.html">The heatmap</a>
+    <a href="gaps.html">Long gaps</a>
+    <a href="deaths.html">Deaths</a>
+    <h5>Panels</h5>
+    <a href="session.html">Session stats</a>
+    <a href="interface.html" class="on">Panels & hotkeys</a>
+    <h5>Help</h5>
+    <a href="faq.html">FAQ</a>
+  </div>
+</nav>
+<main>
+<h1>Panels &amp; hotkeys</h1>
+<p class="lede">Moving things out of the way,
+hiding everything for a recording, and what gets remembered.</p>
+<h2>Dragging</h2>
+
+<p>Both panels drag by their <b>title bar</b>. They are clamped to the window, so a panel can never
+be dragged off-screen and stranded. Where you leave them is remembered.</p>
+
+<h2>Hiding the interface</h2>
+
+<table>
+  <tr><th>Key</th><th>Effect</th></tr>
+  <tr><td><kbd>H</kbd></td><td>Hide/show the EQ Trail panels.</td></tr>
+  <tr><td><kbd>Shift</kbd>+<kbd>H</kbd></td><td>Also hide the Atlas's own header, footer and
+      controls, so the map fills the window.</td></tr>
+</table>
+
+<p><kbd>Shift</kbd>+<kbd>H</kbd> is the one to use for a screen capture. While anything is hidden, a
+small reminder of the key sits in the corner — it fades out so it stays out of your recording, and
+comes back the moment you move the mouse.</p>
+
+<div class="note">
+  <b>Hiding is never remembered.</b> A reload always brings everything back, so a hidden panel can
+  never become a mystery. This is deliberate.
+</div>
+
+<p>The keys are ignored while you are typing in a text field, and they do not clash with the Atlas's
+own shortcuts (which use WASD, QE, FG, ZX and CV).</p>
+
+<h2>Saved settings</h2>
+
+<p>Every option is saved to your browser's <code>localStorage</code> as you change it — slider
+values, toggles, which metrics are plotted, and both panel positions.</p>
+
+<p><b>Nothing from your log is ever stored.</b> It stays in the tab you dropped it into and is gone
+when you close it.</p>
+
+<p>To reset everything to defaults, run this in the console on the Atlas page:</p>
+
+<pre><code>localStorage.removeItem('eqtrail.settings.v1')</code></pre>
+
+<h2>Other panel controls</h2>
+
+<table>
+  <tr><th>Control</th><th>What it does</th></tr>
+  <tr><td>zone</td><td>Every zone found in your log, biggest first. Picking one loads that map.</td></tr>
+  <tr><td>layers</td><td>Show or hide the path, the heat and the death markers independently.</td></tr>
+  <tr><td>stats</td><td>Show or hide the Session panel.</td></tr>
+  <tr><td>swap X/Y</td><td>Flip the <code>/loc</code> column order — see <a href="logs.html">Your log file</a>.</td></tr>
+</table>
+<footer>
+  <a href="../index.html">← Install page</a> ·
+  <a href="https://github.com/kevroy314/eqatlas-overlay">Source</a> ·
+  <a href="https://github.com/kevroy314/eqatlas-overlay/blob/main/CHANGELOG.md">Changelog</a><br><br>
+  A fan tool. Zone geometry, maps and data are © <a href="https://eqltools.com">eqltools.com</a> —
+  sources at <a href="https://eqltools.com/sources">eqltools.com/sources</a>.
+  Not affiliated with EQL&nbsp;Tools or Daybreak Game Company.
+</footer>
+</main>
+</div>
+</body>
+</html>

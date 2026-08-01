@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Overview — EQ Trail wiki</title>
+<meta name="description" content="Drop an EverQuest log onto the EQL Zone Atlas and watch where you actually went — an animated 3D trail of your &lt;code&gt;/loc&lt;/code&gt; track, a heatmap of where the time went, and the numbers from your session counting up alongside it.">
+<link rel="stylesheet" href="wiki.css">
+</head>
+<body>
+<div class="shell">
+<nav class="side">
+  <a class="brand" href="index.html">EQ&nbsp;Trail<span>.</span></a>
+  <div class="tag">wiki</div>
+  <div class="cols">
+    <h5>Start here</h5>
+    <a href="index.html" class="on">Overview</a>
+    <a href="install.html">Install & update</a>
+    <a href="logs.html">Your log file</a>
+    <h5>The map</h5>
+    <a href="trail.html">The trail</a>
+    <a href="heatmap.html">The heatmap</a>
+    <a href="gaps.html">Long gaps</a>
+    <a href="deaths.html">Deaths</a>
+    <h5>Panels</h5>
+    <a href="session.html">Session stats</a>
+    <a href="interface.html">Panels & hotkeys</a>
+    <h5>Help</h5>
+    <a href="faq.html">FAQ</a>
+  </div>
+</nav>
+<main>
+<h1>EQ Trail</h1>
+<p class="lede">Drop an EverQuest log onto the EQL Zone Atlas and watch
+where you actually went — an animated 3D trail of your <code>/loc</code> track, a heatmap of where
+the time went, and the numbers from your session counting up alongside it.</p>
+<figure>
+  <img src="../relief-and-trail.jpg" alt="A glowing trail crosses the Ocean of Tears between islands; orange spikes rise from an island where time was spent.">
+  <figcaption>One session in the Ocean of Tears. The trail is coloured by time; the spikes are minutes camped, as height.</figcaption>
+</figure>
+
+<h2>What it is</h2>
+
+<p>EQ Trail is an <b>overlay</b>. It runs on top of the
+<a href="https://eqltools.com/atlas">EQL Zone Atlas</a> — the real 3D zone geometry, drawn by
+someone else's excellent tool — and adds your own data to it. It is not a copy of the Atlas, it
+re-hosts no map data, and your log file never leaves your browser.</p>
+
+<div class="note tip">
+  <b>Everything happens locally.</b> The log is read and drawn in your own browser. Nothing is
+  uploaded, and the page that hands you the script has no server behind it.
+</div>
+
+<h2>Where to go</h2>
+
+<div class="cards">
+  <a class="card" href="install.html"><b>Install &amp; update →</b>
+    <span>Two minutes with Tampermonkey, and it updates itself afterwards.</span></a>
+  <a class="card" href="logs.html"><b>Your log file →</b>
+    <span>What EQ Trail reads, the <code>/loc</code> macro, and what the numbers mean.</span></a>
+  <a class="card" href="trail.html"><b>The trail →</b>
+    <span>The animated path: playback, colouring, and why it sometimes breaks.</span></a>
+  <a class="card" href="heatmap.html"><b>The heatmap →</b>
+    <span>Where the time went — flat on the ground or extruded into relief.</span></a>
+  <a class="card" href="gaps.html"><b>Long gaps →</b>
+    <span>Camping and AFK time, and how to skip past it.</span></a>
+  <a class="card" href="deaths.html"><b>Deaths →</b>
+    <span>A gravestone where you died, revealed as playback reaches it.</span></a>
+  <a class="card" href="session.html"><b>Session stats →</b>
+    <span>Eleven numbers from your log, animated with the playback.</span></a>
+  <a class="card" href="interface.html"><b>Panels &amp; hotkeys →</b>
+    <span>Dragging, hiding the UI for a recording, saved settings.</span></a>
+  <a class="card" href="faq.html"><b>FAQ →</b>
+    <span>Nothing showed up · trail in the wrong place · odd-looking heatmap.</span></a>
+</div>
+
+<h2>The one-paragraph version</h2>
+
+<p>Install the userscript, open a zone on <a href="https://eqltools.com/atlas">eqltools.com/atlas</a>,
+and drop your <code>eqlog_*.txt</code> onto the <b>Trail</b> panel that appears. If your log has
+<code>/loc</code> lines in it, you get a trail. If it has combat in it, you get the Session panel too.
+Everything else on this wiki is detail.</p>
+<footer>
+  <a href="../index.html">← Install page</a> ·
+  <a href="https://github.com/kevroy314/eqatlas-overlay">Source</a> ·
+  <a href="https://github.com/kevroy314/eqatlas-overlay/blob/main/CHANGELOG.md">Changelog</a><br><br>
+  A fan tool. Zone geometry, maps and data are © <a href="https://eqltools.com">eqltools.com</a> —
+  sources at <a href="https://eqltools.com/sources">eqltools.com/sources</a>.
+  Not affiliated with EQL&nbsp;Tools or Daybreak Game Company.
+</footer>
+</main>
+</div>
+</body>
+</html>

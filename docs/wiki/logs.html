@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your log file — EQ Trail wiki</title>
+<meta name="description" content="EQ Trail needs exactly one thing from your log: &lt;code&gt;/loc&lt;/code&gt; lines. Everything else it reads is a bonus.">
+<link rel="stylesheet" href="wiki.css">
+</head>
+<body>
+<div class="shell">
+<nav class="side">
+  <a class="brand" href="index.html">EQ&nbsp;Trail<span>.</span></a>
+  <div class="tag">wiki</div>
+  <div class="cols">
+    <h5>Start here</h5>
+    <a href="index.html">Overview</a>
+    <a href="install.html">Install & update</a>
+    <a href="logs.html" class="on">Your log file</a>
+    <h5>The map</h5>
+    <a href="trail.html">The trail</a>
+    <a href="heatmap.html">The heatmap</a>
+    <a href="gaps.html">Long gaps</a>
+    <a href="deaths.html">Deaths</a>
+    <h5>Panels</h5>
+    <a href="session.html">Session stats</a>
+    <a href="interface.html">Panels & hotkeys</a>
+    <h5>Help</h5>
+    <a href="faq.html">FAQ</a>
+  </div>
+</nav>
+<main>
+<h1>Your log file</h1>
+<p class="lede">EQ Trail needs exactly one thing from your log:
+<code>/loc</code> lines. Everything else it reads is a bonus.</p>
+<h2>The line that matters</h2>
+
+<pre><code>[Mon Jul 27 20:14:06 2026] Your Location is 8277.13, -2583.59, 126.62</code></pre>
+
+<p>That is the only line vanilla EverQuest writes that carries a position. Bind <code>/loc</code> to
+a macro and let it fire while you play.</p>
+
+<p>The three numbers are <b>east, north, up</b> — X first.</p>
+
+<div class="note">
+  <b>That contradicts the usual folklore</b>, which says <code>/loc</code> prints north first. It was
+  settled by measurement rather than argument: take every <code>/loc</code> in a log, group by the
+  zone it was logged in, and check which reading lands inside that zone's published bounds. Across
+  two logs from two different clients — EQ Legends and P1999 Green — "east first" fits every zone
+  with samples (8/8 and 8/8), while "north first" falls outside the map in 5 of 8 and 3 of 8.
+  <br><br>
+  If you ever meet a client that really does print north first, the <b>swap X/Y</b> button flips it.
+</div>
+
+<h2>You do not need to log the time</h2>
+
+<p>Every line EQ writes is already stamped with the date and time — that bracket <i>is</i> the time
+series. Your macro only has to say <code>/loc</code>.</p>
+
+<p>One consequence: timestamps are whole seconds, so several <code>/loc</code>s inside one second
+arrive identical. EQ Trail spreads a same-second run evenly across that second so playback does not
+stutter. It invents no positions — it only distributes samples already known to fall inside that
+second.</p>
+
+<h2>How often the macro fires changes what the heatmap means</h2>
+
+<p>This is the single most important thing to understand about your own data.</p>
+
+<table>
+  <tr><th>If your macro…</th><th>Then…</th></tr>
+  <tr><td class="wide"><b>fires on a fixed interval</b> (every few seconds regardless)</td>
+      <td>Time and traffic agree. Use <b>weight: time</b>. This is the better data.</td></tr>
+  <tr><td class="wide"><b>only fires while you move</b></td>
+      <td>Standing still writes nothing, so "time per cell" credits a whole camp to the last sample
+          before you stopped. Use <b>weight: visits</b> — it counts samples and is honest about it.</td></tr>
+</table>
+
+<h2>Zones</h2>
+
+<p><code>You have entered &lt;Zone&gt;.</code> lines split your session by zone. EQ Trail then:</p>
+
+<ul>
+  <li>merges each zone's <b>repeat visits</b> into one series — 100 samples spread over 37 separate
+      visits are useless as 37 three-point stubs;</li>
+  <li>lists every zone found in the <b>zone</b> dropdown, biggest first, with visit counts;</li>
+  <li>starts on <b>the zone you already have open</b>, if your log has samples there, rather than
+      yanking you elsewhere;</li>
+  <li>marks zones the Atlas has no map for as <code>no map</code>, and draws them on whatever zone
+      is open.</li>
+</ul>
+
+<h2>Size is not a problem</h2>
+
+<p>Drop the whole thing. Logs are read in 4&nbsp;MiB slices with a cheap filter ahead of the regex,
+so nothing large is ever held in memory at once.</p>
+
+<table>
+  <tr><th>Real file</th><th>Lines</th><th>Parse time</th></tr>
+  <tr><td>121 MB</td><td>1,573,716</td><td>~3 s</td></tr>
+  <tr><td>79 MB</td><td>999,925</td><td>~2.6 s</td></tr>
+</table>
+
+<p>A progress readout appears in the panel while it works.</p>
+<footer>
+  <a href="../index.html">← Install page</a> ·
+  <a href="https://github.com/kevroy314/eqatlas-overlay">Source</a> ·
+  <a href="https://github.com/kevroy314/eqatlas-overlay/blob/main/CHANGELOG.md">Changelog</a><br><br>
+  A fan tool. Zone geometry, maps and data are © <a href="https://eqltools.com">eqltools.com</a> —
+  sources at <a href="https://eqltools.com/sources">eqltools.com/sources</a>.
+  Not affiliated with EQL&nbsp;Tools or Daybreak Game Company.
+</footer>
+</main>
+</div>
+</body>
+</html>
