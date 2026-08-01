@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.6.0 — 2026-07-30
+
+### Gap handling
+
+A `/loc` stream is not continuous — the macro stops, you camp a spawn, you fall asleep. Measured on a
+real seven-hour session: **58 gaps longer than a minute, totalling 1h50 — 26% of the session.** Played
+back as-is that is a quarter of the runtime spent watching a stationary dot.
+
+New **gaps** section in the panel: a mode, a threshold, a fast-forward factor, and which layers it
+applies to.
+
+- **skip** — discard the excess beyond the threshold (default).
+- **fast fwd** — divide the excess by the factor (default 10×).
+- **real** — a gap is time like any other; the previous behaviour.
+
+Playback now runs on a **presentation clock** related to the log clock by a piecewise-linear map,
+rather than special-casing skips inside the animation loop. Ordinary intervals map 1:1, gaps map
+through the policy, and everything downstream — the shader, the gravestones, the Session stats —
+keeps working in honest log time. Measured effect on that session: stepping the playhead in 400 even
+increments, `real` covers a uniform 63s of log time per step whether anything is happening or not,
+while `skip` drops the median step to 46s and crosses the gaps in single jumps. The time saved goes
+to the parts with movement in them.
+
+**"skip" means something deliberately different per layer.** In the animation the gap is *jumped* —
+there is nothing to watch. On the heatmap the interval is *capped* at the threshold, not zeroed:
+zeroing it would erase a camp from the map, and a camp is the thing the heatmap exists to show. Same
+rule, different baseline, because the two layers ask different questions about the same silence.
+
+The **applies to** control (`both` / `path` / `heat`) exists for exactly that tension — verified that
+`heat` leaves the animation timeline untouched and `path` leaves the heat weights untouched.
+
+### Fixed
+
+- `maxGap` was documented in the defaults but **never read** — the dwell computation hardcoded 30
+  seconds. The gap threshold now genuinely drives it, and the setting is gone.
+- Dwell credit is computed per *interval* and split between its two endpoint samples, so a long
+  silence is discounted once where it actually occurs rather than twice at both ends.
+
 ## 0.5.0 — 2026-07-29
 
 - **Gravestones at each death**, revealed in step with playback so a death appears as the trail

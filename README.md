@@ -55,6 +55,10 @@ Drop `eqlog_<Character>_<server>.txt` onto the panel (or click it to browse). Th
 | **relief** | `flat` paints the floor; higher extrudes the heat into a 3D relief |
 | **weight** | **time** = seconds spent per cell · **visits** = number of `/loc` samples |
 | **layers** | show/hide the path, the heat, and the death markers independently |
+| **gaps** | how to treat long silences: `skip` · `fast fwd` · `real` |
+| **over** | how long a silence has to be before it counts as a gap |
+| **speed-up** | the fast-forward divisor (only shown in `fast fwd`) |
+| **applies to** | whether the gap policy touches `both` layers, just the `path`, or just the `heat` |
 | **stats** | show or hide the Session panel |
 | **swap X/Y** | flip the `/loc` column order, for a client that prints north first |
 | **hide** | `trail UI` hides our panels · `all UI` also hides the site's chrome for recording |
@@ -155,7 +159,34 @@ Two things worth knowing before you trust the heatmap:
 - **The ribbon breaks where the log went quiet.** Consecutive samples more than `opts.gapBreak`
   seconds apart (300 by default) start a new run rather than joining. Without it, two `/loc`s from
   different days — or from either side of a camp — would be drawn as a confident straight line
-  across the zone.
+  across the zone. Note this is a *drawing* rule and is separate from the gap **time** policy below;
+  one decides where the ribbon is cut, the other decides how long the playhead lingers.
+
+## Long gaps
+
+A `/loc` stream is not continuous. The macro stops, you camp a spawn, you go and make a coffee. On a
+real seven-hour session that came to **58 gaps over a minute long, totalling 1h50 — 26% of the
+session** spent, on playback, watching a stationary dot.
+
+The **gaps** section controls it:
+
+| Mode | Effect |
+|---|---|
+| `skip` | Discard the excess beyond the threshold. The default. |
+| `fast fwd` | Divide the excess by the speed-up factor (10× by default). |
+| `real` | A gap is time like any other. The pre-0.6 behaviour. |
+
+Playback runs on a **presentation clock**, related to the log clock by a piecewise-linear map:
+ordinary intervals map 1:1, gaps map through the policy. Everything downstream — the trail shader,
+the gravestones, the Session stats — still works in real log time; only the *pacing* changes. The
+scrubber follows the presentation clock too, so dragging it gives even attention to the parts where
+something actually happens.
+
+**`skip` deliberately means something different per layer.** In the animation the gap is *jumped* —
+there is nothing to watch. On the heatmap the interval is *capped* at the threshold rather than
+zeroed, because zeroing it would erase a camp from the map, and a camp is precisely what the heatmap
+is for. Same rule, different baseline. **applies to** exists for that tension: set it to `heat` and
+the animation timeline is untouched; set it to `path` and the heat weights are.
 
 ---
 

@@ -82,7 +82,27 @@
         // the single sample before you stopped moving — 'visits' is the truthful one there, and it
         // measures traffic, not dwell. Default 'time'; the toggle is in the panel.
         heatBy: 'time',
-        maxGap: 30,             // seconds any one sample may claim (an AFK gap is not standing still)
+
+        // ---- large gaps in the stream ----
+        // A /loc stream is not continuous. The macro stops, the player camps a spawn, or falls asleep —
+        // and a quarter of a real seven-hour session turns out to be gaps longer than a minute. Played
+        // back as-is that is a stationary dot for a quarter of the runtime, and on the heatmap it is one
+        // cell soaking up every colour in the ramp.
+        //
+        //   'real' — a gap is time like any other. Nothing is done.
+        //   'ff'   — the excess beyond the threshold is divided by gapFF.
+        //   'skip' — the excess beyond the threshold is discarded.
+        //
+        // 'skip' means something slightly different per layer, on purpose:
+        //   · animation — the gap is JUMPED (zero presentation time). There is nothing to watch.
+        //   · heatmap   — the interval is CAPPED at the threshold, not zeroed. Zeroing it would erase a
+        //     camp from the map entirely, and a camp is exactly the thing the heatmap exists to show.
+        // Same rule ("discard the excess"), different baseline, because the two layers are answering
+        // different questions about the same silence.
+        gapMode: 'skip',
+        gapThreshold: 60,       // seconds — above this, an interval counts as a gap
+        gapFF: 10,              // 'ff' divisor applied to the excess
+        gapApply: 'both',       // 'both' | 'anim' | 'heat' — which layers the policy touches
         // Break the ribbon when consecutive samples are further apart than this. A real log is not a
         // continuous track: the macro stops, you camp, you log out, you come back three days later —
         // and every zone visit gets merged into one series. Without a break the tube draws a confident
@@ -613,12 +633,15 @@
         const S = O.raw.map(r => ({ t: r.t, p: locToMesh(r.east, r.north, r.up) }));
         O.t0 = S[0].t; O.t1 = S[S.length - 1].t;
         const span = Math.max(1e-6, O.t1 - O.t0);
-        // A gap in /loc spam is not 40 minutes of standing still — it's the macro stopping. Clamp the
-        // dwell any one sample can claim, or one AFK gap eats the whole colour range.
+        // Dwell credit per sample. Each INTERVAL between samples is passed through the gap policy
+        // first, then split half to the sample on either side — so a long silence is discounted once,
+        // at the interval that actually contains it, rather than twice at both of its endpoints.
+        const eff = [];
+        for (let i = 0; i < S.length - 1; i++) eff.push(heatGap(S[i + 1].t - S[i].t));
         const dts = [];
         for (let i = 0; i < S.length; i++) {
-          const a = i > 0 ? S[i].t - S[i - 1].t : 0, b = i < S.length - 1 ? S[i + 1].t - S[i].t : 0;
-          dts.push(Math.min((a + b) / 2 || 1, 30));
+          const a = i > 0 ? eff[i - 1] : 0, b = i < eff.length ? eff[i] : 0;
+          dts.push((a + b) / 2 || 1);
         }
         let maxSpd = 1e-6;
         for (let i = 1; i < S.length; i++) {
@@ -679,6 +702,12 @@
         // ---- 2. the dwell heatmap ----
         if (o.heatOn) buildHeat(Z, S, dts, scaleR); else O.heatStats = null;
         buildGraves(Z, scaleR);
+        // Remember where we are in LOG time, rebuild the map, then land on the same moment again.
+        // Without this, changing the gap mode keeps the same presentation fraction and therefore jumps
+        // the playhead to a different point in the session — which reads as the setting breaking things.
+        const wasAt = (O.tmap && O.raw.length) ? logAtPres(O.u * O.presSpan) : null;
+        buildTimeMap();
+        if (wasAt != null && O.tmap) O.u = Math.min(1, Math.max(0, presAtLog(wasAt) / O.presSpan));
 
         applyU();
         stat();
@@ -790,9 +819,11 @@
       }
 
       function applyU() {
-        if (O.pathMat) O.pathMat.uniforms.uHead.value = O.u;
-        if (!O.raw.length) return;
-        const tNow = O.t0 + (O.t1 - O.t0) * O.u;
+        if (!O.raw.length) { if (O.pathMat) O.pathMat.uniforms.uHead.value = O.u; return; }
+        // O.u is a position on the PRESENTATION clock. Everything else — the shader, the graves, the
+        // stats — speaks log time, so convert once here and let them stay honest.
+        const tNow = O.tmap ? logAtPres(O.u * O.presSpan) : O.t0 + (O.t1 - O.t0) * O.u;
+        if (O.pathMat) O.pathMat.uniforms.uHead.value = (tNow - O.t0) / Math.max(1e-6, O.t1 - O.t0);
         const a = O.raw[sampleIndexAt(tNow)];
         const p = posAt(tNow);
         updateGraves(tNow);
@@ -805,7 +836,9 @@
         const hud = document.getElementById('eqtrail-hud');
         if (hud) {
           const d = new Date(tNow * 1000);
-          hud.textContent = `${d.toISOString().slice(11, 19)}  ·  ${a.north.toFixed(0)}, ${a.east.toFixed(0)}, ${a.up.toFixed(0)}`;
+          const g = gapAt(tNow);
+          hud.textContent = `${d.toISOString().slice(11, 19)}  ·  ${a.north.toFixed(0)}, ${a.east.toFixed(0)}, ${a.up.toFixed(0)}`
+            + (g ? `   ${O.opts.gapMode === 'ff' ? '\u23e9' : '\u23ed'} ${fmtDur(g)} gap` : '');
         }
         const sc = document.getElementById('eqtrail-scrub');
         if (sc && document.activeElement !== sc) sc.value = String(Math.round(O.u * 1000));
@@ -820,7 +853,9 @@
         const tick = (now) => {
           if (!O.playing) return;
           const dt = (now - O._last) / 1000; O._last = now;
-          const span = Math.max(1, O.t1 - O.t0);
+          // Advance on the presentation clock: with gaps skipped this span is shorter than the session,
+          // so the same `speed` setting spends its time on the parts worth watching.
+          const span = O.tmap ? O.presSpan : Math.max(1, O.t1 - O.t0);
           O.u += (O.opts.speed * dt) / span;
           if (O.u >= 1) { O.u = 0; }            // loop
           applyU();
@@ -829,6 +864,74 @@
         O._raf = requestAnimationFrame(tick);
       };
       function syncBtn() { const b = document.getElementById('eqtrail-play'); if (b) b.textContent = O.playing ? '⏸' : '▶'; }
+
+      // ======================== gap policy / time warp ======================
+      // Playback runs on a PRESENTATION clock, not the log clock. The two are related by a piecewise
+      // linear map built once per rebuild: ordinary intervals map 1:1, gaps map through the policy. So
+      // "skip" is not a special case sprinkled through the animation loop — it is just a segment of the
+      // map with zero length, and everything downstream keeps working in honest log time.
+      const gapAffects = layer => O.opts.gapApply === 'both' || O.opts.gapApply === layer;
+
+      // Presentation duration of one interval between samples.
+      function animGap(dt) {
+        const o = O.opts;
+        if (!gapAffects('anim') || dt <= o.gapThreshold || o.gapMode === 'real') return dt;
+        if (o.gapMode === 'ff') return o.gapThreshold + (dt - o.gapThreshold) / Math.max(1, o.gapFF);
+        return 0;                                   // skip — jump it, there is nothing to watch
+      }
+      // Dwell credit for one interval between samples.
+      function heatGap(dt) {
+        const o = O.opts;
+        if (!gapAffects('heat') || dt <= o.gapThreshold || o.gapMode === 'real') return dt;
+        if (o.gapMode === 'ff') return o.gapThreshold + (dt - o.gapThreshold) / Math.max(1, o.gapFF);
+        return o.gapThreshold;                      // skip — cap it, do not erase the camp
+      }
+
+      // Build the map. `log[i]` is the sample's real timestamp, `pres[i]` where it lands on the
+      // presentation clock. Both are monotonic, so either direction is a binary search plus a lerp.
+      function buildTimeMap() {
+        O.tmap = null; O.gapStats = null;
+        if (!O.raw || O.raw.length < 2) return;
+        const log = [O.raw[0].t], pres = [0];
+        let skipped = 0, gaps = 0;
+        for (let i = 1; i < O.raw.length; i++) {
+          const dt = O.raw[i].t - O.raw[i - 1].t;
+          const shown = animGap(dt);
+          if (dt > O.opts.gapThreshold) { gaps++; skipped += dt - shown; }
+          log.push(O.raw[i].t);
+          pres.push(pres[pres.length - 1] + shown);
+        }
+        O.tmap = { log, pres };
+        O.presSpan = Math.max(1e-6, pres[pres.length - 1]);
+        O.gapStats = { gaps, skipped, logSpan: Math.max(1e-6, O.raw[O.raw.length - 1].t - O.raw[0].t) };
+      }
+
+      function lerpMap(from, to, v) {
+        if (!O.tmap) return v;
+        const a = O.tmap[from], b = O.tmap[to];
+        if (v <= a[0]) return b[0];
+        if (v >= a[a.length - 1]) return b[b.length - 1];
+        let lo = 0, hi = a.length - 1;
+        while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (a[mid] <= v) lo = mid; else hi = mid - 1; }
+        const hiI = Math.min(a.length - 1, lo + 1);
+        const d = a[hiI] - a[lo];
+        // A zero-length segment is a skipped gap: land on its far end rather than dividing by zero.
+        return d > 0 ? b[lo] + (b[hiI] - b[lo]) * ((v - a[lo]) / d) : b[hiI];
+      }
+      const logAtPres = p => lerpMap('pres', 'log', p);
+      const presAtLog = t => lerpMap('log', 'pres', t);
+
+      // Is the playhead inside a compressed gap right now? Used to tell the reader what just happened,
+      // so a sudden jump reads as a deliberate skip rather than as a glitch.
+      function gapAt(t) {
+        if (!O.tmap || O.opts.gapMode === 'real' || !gapAffects('anim')) return null;
+        const L = O.tmap.log;
+        let lo = 0, hi = L.length - 1;
+        while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (L[mid] <= t) lo = mid; else hi = mid - 1; }
+        const hiI = Math.min(L.length - 1, lo + 1);
+        const dt = L[hiI] - L[lo];
+        return dt > O.opts.gapThreshold ? dt : null;
+      }
 
       // ============================ gravestones =============================
       // One marker per death, placed where the /loc track says you were standing, revealed in step with
@@ -1358,6 +1461,19 @@
           ${slider('opacity', 'heatOpacity', 0, 1, 0.02, v => Math.round(v * 100) + '%')}
           <div class="eqt-row"><label>weight</label>
             <button data-w="time" class="on">time</button><button data-w="visits">visits</button></div>
+          <hr style="border:0;border-top:1px solid #2c2545;margin:11px 0 8px">
+          <div class="eqt-row"><label>gaps</label>
+            <button data-g="skip" class="on">skip</button><button data-g="ff">fast fwd</button>
+            <button data-g="real">real</button></div>
+          ${slider('over', 'gapThreshold', 10, 900, 10, v => fmtDur(v))}
+          <div class="eqt-row" id="eqtrail-ffrow" style="display:none">
+            <label>speed-up</label>
+            <input type="range" data-k="gapFF" min="2" max="60" step="1" value="${O.opts.gapFF}">
+            <span class="v" data-v="gapFF">${O.opts.gapFF}\u00d7</span></div>
+          <div class="eqt-row"><label>applies to</label>
+            <button data-a="both" class="on">both</button><button data-a="anim">path</button>
+            <button data-a="heat">heat</button></div>
+          <div id="eqtrail-gapinfo" class="eqt-cap"></div>
           <div class="eqt-row"><label>layers</label>
             <button data-t="pathOn" class="on">path</button><button data-t="heatOn" class="on">heat</button>
             <button data-t="gravesOn" class="on">deaths</button></div>
@@ -1382,12 +1498,11 @@
           r.oninput = e => {
             const k = e.target.dataset.k, v = +e.target.value;
             O.opts[k] = v;
-            el.querySelector(`[data-v="${k}"]`).textContent =
-              k === 'speed' ? v + '×' : k === 'cell' ? v : k === 'relief' ? (v == 0 ? 'flat' : v) : Math.round(v * 100) + '%';
+            el.querySelector(`[data-v="${k}"]`).textContent = fmtOpt(k, v);
             if (k === 'trail' && O.pathMat) O.pathMat.uniforms.uTrail.value = v;
             else if (k === 'future' && O.pathMat) O.pathMat.uniforms.uFuture.value = v;
             else if (k === 'heatOpacity' && O.heat) O.heat.material.opacity = v;
-            else if (k === 'cell' || k === 'relief') { O.rebuild(); stat(); }
+            else if (k === 'cell' || k === 'relief' || k === 'gapThreshold' || k === 'gapFF') { O.rebuild(); stat(); }
             saveSettings();
           };
         });
@@ -1400,6 +1515,17 @@
         el.querySelectorAll('button[data-t]').forEach(b => b.onclick = () => {
           const k = b.dataset.t; O.opts[k] = !O.opts[k];
           b.classList.toggle('on', O.opts[k]); O.rebuild(); saveSettings();
+        });
+        el.querySelectorAll('button[data-g]').forEach(b => b.onclick = () => {
+          O.opts.gapMode = b.dataset.g;
+          el.querySelectorAll('button[data-g]').forEach(x => x.classList.toggle('on', x === b));
+          el.querySelector('#eqtrail-ffrow').style.display = O.opts.gapMode === 'ff' ? 'flex' : 'none';
+          O.rebuild(); saveSettings();
+        });
+        el.querySelectorAll('button[data-a]').forEach(b => b.onclick = () => {
+          O.opts.gapApply = b.dataset.a;
+          el.querySelectorAll('button[data-a]').forEach(x => x.classList.toggle('on', x === b));
+          O.rebuild(); saveSettings();
         });
         el.querySelectorAll('button[data-w]').forEach(b => b.onclick = () => {
           O.opts.heatBy = b.dataset.w;
@@ -1441,15 +1567,34 @@
       // truthful — but anything that changes an option WITHOUT going through a control (the console,
       // a restored setting, a future preset) would leave the widgets describing a state the map is no
       // longer in. Cheap enough to just re-assert after every rebuild.
+      function fmtOpt(k, v) {
+        return k === 'speed' ? v + '\u00d7'
+          : k === 'cell' ? String(v)
+          : k === 'relief' ? (v == 0 ? 'flat' : String(v))
+          : k === 'gapThreshold' ? fmtDur(v)
+          : k === 'gapFF' ? v + '\u00d7'
+          : Math.round(v * 100) + '%';
+      }
       function syncControls() {
         const el = document.getElementById('eqtrail-panel'); if (!el) return;
         el.querySelectorAll('input[type=range][data-k]').forEach(r => {
           const k = r.dataset.k, v = O.opts[k];
           if (document.activeElement !== r) r.value = String(v);
           const out = el.querySelector(`[data-v="${k}"]`);
-          if (out) out.textContent =
-            k === 'speed' ? v + '×' : k === 'cell' ? v : k === 'relief' ? (v == 0 ? 'flat' : v) : Math.round(v * 100) + '%';
+          if (out) out.textContent = fmtOpt(k, v);
         });
+        el.querySelectorAll('button[data-g]').forEach(x => x.classList.toggle('on', x.dataset.g === O.opts.gapMode));
+        el.querySelectorAll('button[data-a]').forEach(x => x.classList.toggle('on', x.dataset.a === O.opts.gapApply));
+        const ff = el.querySelector('#eqtrail-ffrow');
+        if (ff) ff.style.display = O.opts.gapMode === 'ff' ? 'flex' : 'none';
+        const gi = document.getElementById('eqtrail-gapinfo');
+        if (gi) {
+          const g = O.gapStats;
+          gi.textContent = !g || !g.gaps ? ''
+            : O.opts.gapMode === 'real'
+              ? `${g.gaps} gaps over ${fmtDur(O.opts.gapThreshold)} — shown in full`
+              : `${g.gaps} gaps · ${fmtDur(g.skipped)} of ${fmtDur(g.logSpan)} removed from playback`;
+        }
         el.querySelectorAll('button[data-c]').forEach(x => x.classList.toggle('on', x.dataset.c === O.opts.colorBy));
         el.querySelectorAll('button[data-w]').forEach(x => x.classList.toggle('on', x.dataset.w === O.opts.heatBy));
         el.querySelectorAll('button[data-t]').forEach(x => x.classList.toggle('on', !!O.opts[x.dataset.t]));

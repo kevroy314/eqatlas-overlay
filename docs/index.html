@@ -174,6 +174,9 @@ and drawn over whatever zone is open.</p>
   <tr><td>relief</td><td><b>flat</b> paints the floor; higher extrudes the heat into a 3D relief</td></tr>
   <tr><td>weight</td><td><b>time</b> = seconds per cell · <b>visits</b> = number of samples</td></tr>
   <tr><td>layers</td><td>show or hide the path, the heat, and the death markers independently</td></tr>
+  <tr><td>gaps</td><td>how to treat long silences in the log — <b>skip</b>, <b>fast fwd</b> or <b>real</b></td></tr>
+  <tr><td>over</td><td>how long a silence has to be before it counts as a gap</td></tr>
+  <tr><td>applies to</td><td>whether that policy touches both layers, just the path, or just the heat</td></tr>
   <tr><td>stats</td><td>show or hide the Session panel</td></tr>
   <tr><td>hide</td><td><b>trail UI</b> hides our panels · <b>all UI</b> also hides the site's own chrome</td></tr>
 </table>
@@ -188,6 +191,25 @@ is saved in your browser as you change it. Nothing from the log is ever stored.<
   back — and while anything is hidden, a small reminder of the key sits in the corner, fading out so
   it stays out of your capture and returning the moment you move the mouse. Neither is remembered
   after a reload.
+</div>
+
+<h2>Long gaps — camping, AFK, and the boring bits</h2>
+
+<p>Your <code>/loc</code> stream isn't continuous. The macro stops, you camp a spawn, you go and make
+a coffee. On a real seven-hour session that came to <b>58 gaps over a minute long, adding up to 1h50
+— a quarter of the whole session</b>. Played back as-is, that's a quarter of your time watching a dot
+that isn't moving.</p>
+
+<p>The <b>gaps</b> section fixes it. <b>skip</b> (the default) jumps over them, <b>fast fwd</b> runs
+them at 10× so you can still see that time passed, and <b>real</b> leaves them alone. <b>over</b> sets
+how long a silence has to be before it counts, and <b>applies to</b> chooses whether the rule touches
+the animation, the heatmap, or both.</p>
+
+<div class="note">
+  Why that last control exists: on the animation a gap is dead air worth skipping, but on the heatmap
+  a long pause is often a <b>camp</b> — the very thing you want to see. So <b>skip</b> jumps the gap in
+  the animation, while on the heatmap it merely <em>caps</em> it rather than erasing it. If you want
+  one behaviour and not the other, <b>applies to</b> is how you say so.
 </div>
 
 <h2>The Session panel</h2>
