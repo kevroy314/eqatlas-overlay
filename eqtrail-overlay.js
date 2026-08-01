@@ -1053,7 +1053,7 @@
     if (!box) return;
     const rel = O.release;
     if (!rel || !rel.versions || !rel.versions.length) {
-      box.innerHTML = `<div class="hint">No version list yet — it is fetched once a day from the
+      box.innerHTML = `<div class="eqt-vhint">No version list yet — it is fetched once a day from the
         project page.${O.opts.updateCheck ? '' : ' Update checks are currently <b>off</b>.'}
         <a href="${REPO}/releases" target="_blank" rel="noopener">All releases \u2192</a></div>`;
       return;
@@ -1064,7 +1064,7 @@
              `<span>v${e.v}${cur ? ' \u2190 installed' : ''}</span><i>${e.date}</i></a>`;
     }).join('');
     box.innerHTML = rows +
-      `<div class="hint"><b>Pinned</b> — these do not auto-update, so a rollback sticks. Older ones
+      `<div class="eqt-vhint"><b>Pinned</b> — these do not auto-update, so a rollback sticks. Older ones
        have no version row: return via <a href="${PAGES}/${rel.install}" target="_blank"
        rel="noopener">the install page</a> · <a href="${REPO}/releases" target="_blank"
        rel="noopener">notes</a></div>`;
@@ -1490,7 +1490,7 @@
   .eqt-row{display:flex;align-items:center;gap:7px;margin:6px 0}
   .eqt-row label{flex:0 0 66px;color:#9d95bb;font-size:11px}
   .eqt-row input[type=range]{flex:1;accent-color:#7c6fe0;height:16px}
-  .eqt-row .v{flex:0 0 34px;text-align:right;font:11px ui-monospace,monospace;color:#cfc7ea}
+  .eqt-row .eqt-v{flex:0 0 34px;text-align:right;font:11px ui-monospace,monospace;color:#cfc7ea}
   #eqtrail-panel button{background:#2a2344;color:#e8e6f2;border:1px solid #443a68;border-radius:6px;
     padding:4px 9px;cursor:pointer;font-size:12px}
   #eqtrail-panel button:hover{background:#372c5c}
@@ -1527,9 +1527,16 @@
   #eqtrail-verlist a.cur{color:#9fe8ff}
   /* Explicit: this block inherits white-space:nowrap from the panel, which clipped the sentence
      rather than wrapping it (scrollWidth 311 into a 236px box). */
-  #eqtrail-verlist .hint{padding:6px 9px;font-size:10px;color:#6d6590;line-height:1.45;
+  /* NAME THIS CAREFULLY. It was named .hint once, and the Atlas has its own .hint — the floating
+     pill under the 3D view ("scroll to fly toward the cursor…"). Ours silently inherited
+     position:absolute, border-radius:999px and pointer-events:none from it, and turned into a
+     detached, wildly-rounded bubble that floated over the panel and let clicks fall through to
+     the file-drop zone behind it, opening a file dialog. Scoping OUR selector does not help — the
+     host's rule is what matches our element — so the class NAME has to be ours alone. Every class
+     this overlay adds is prefixed eqt- for that reason. See issue #4. */
+  #eqtrail-verlist .eqt-vhint{padding:6px 9px;font-size:10px;color:#6d6590;line-height:1.45;
     background:#171233;white-space:normal}
-  #eqtrail-verlist .hint a{color:#9fe8ff}
+  #eqtrail-verlist .eqt-vhint a{color:#9fe8ff}
   .eqt-keyhint{margin-top:7px;font-size:10px;color:#6d6590;line-height:1.4}
   .eqt-keyhint b{color:#9fe8ff;font-family:ui-monospace,monospace;font-weight:600}`;
 
@@ -1591,7 +1598,7 @@
   function slider(label, key, min, max, step, fmt, onChange) {
     return `<div class="eqt-row"><label>${label}</label>
       <input type="range" data-k="${key}" min="${min}" max="${max}" step="${step}" value="${O.opts[key]}">
-      <span class="v" data-v="${key}">${fmt(O.opts[key])}</span></div>`;
+      <span class="eqt-v" data-v="${key}">${fmt(O.opts[key])}</span></div>`;
   }
 
   function buildPanel() {
@@ -1627,7 +1634,7 @@
       <div class="eqt-row" id="eqtrail-ffrow" style="display:none">
         <label>speed-up</label>
         <input type="range" data-k="gapFF" min="2" max="60" step="1" value="${O.opts.gapFF}">
-        <span class="v" data-v="gapFF">${O.opts.gapFF}\u00d7</span></div>
+        <span class="eqt-v" data-v="gapFF">${O.opts.gapFF}\u00d7</span></div>
       <div class="eqt-row"><label>applies to</label>
         <button data-a="both" class="on">both</button><button data-a="anim">path</button>
         <button data-a="heat">heat</button></div>
@@ -1704,9 +1711,12 @@
     el.querySelector('#eqtrail-statsbtn').onclick = () => O.toggleStats();
     el.querySelector('#eqtrail-bug').onclick = () => window.open(issueUrl('bug'), '_blank', 'noopener');
     el.querySelector('#eqtrail-idea').onclick = () => window.open(issueUrl('idea'), '_blank', 'noopener');
-    el.querySelector('#eqtrail-vers').onclick = () => {
+    el.querySelector('#eqtrail-vers').onclick = (e) => {
       const box = el.querySelector('#eqtrail-verlist');
       box.hidden = !box.hidden;
+      // Show the button as pressed while the list is open. Reported as "not clear how to dismiss":
+      // an untoggled button beside an open list gives no hint that it is the way to close it.
+      e.currentTarget.classList.toggle('on', !box.hidden);
       if (!box.hidden) { renderVersions(); checkVersion(true); }
     };
     el.querySelector('#eqtrail-hideours').onclick = () => setHidden(true, O.hidden.site);
@@ -1816,8 +1826,8 @@
     border-radius:7px;padding:6px 8px;cursor:pointer;transition:background .12s ease}
   .eqt-card:hover{background:#241d40}
   .eqt-card.on{background:#241d40}
-  .eqt-card .v{font:600 15px/1.2 ui-monospace,monospace;color:#e8e6f2}
-  .eqt-card .l{font-size:9.5px;color:#8d85ab;letter-spacing:.02em;margin-top:1px;
+  .eqt-card .eqt-v{font:600 15px/1.2 ui-monospace,monospace;color:#e8e6f2}
+  .eqt-card .eqt-l{font-size:9.5px;color:#8d85ab;letter-spacing:.02em;margin-top:1px;
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .eqt-card.dead{opacity:.35;cursor:default}
   #eqtrail-chartwrap{padding:0 10px 6px}
@@ -1858,7 +1868,7 @@
       const col = seriesColor(m.k);
       return `<div class="eqt-card${has ? '' : ' dead'}${on && has ? ' on' : ''}" data-k="${m.k}"
         style="border-left-color:${on && has ? col : '#2c2545'}">
-        <div class="v" data-v="${m.k}">—</div><div class="l">${m.label}</div></div>`;
+        <div class="eqt-v" data-v="${m.k}">—</div><div class="eqt-l">${m.label}</div></div>`;
     }).join('');
     box.querySelectorAll('.eqt-card:not(.dead)').forEach(c => c.onclick = () => {
       const k = c.dataset.k, i = O.opts.series.indexOf(k);

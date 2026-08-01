@@ -250,6 +250,16 @@ the overlay behave like a native layer, and three details will silently defeat y
   against the ground, and is invisible everywhere **with no error in the console**.
 - **`Z.clip` is per band.** `Z.clip[i]` is that band's `[yMin, yMax]` plane pair. Handing a material
   the whole nested array clips everything away.
+- **Never give an element a class name the host page also uses.** Ours was `.hint`; the Atlas has
+  its own `.hint` — the floating pill under the 3D view. Our element silently inherited
+  `position:absolute`, `border-radius:999px` and `pointer-events:none` from it and became a
+  detached, wildly-rounded bubble that floated over the panel and let clicks fall *through* to the
+  file-drop zone behind it. Scoping our own selector does not help: the host's rule is what matches
+  our element, so the class **name** has to be ours alone. Every class this overlay adds is
+  prefixed `eqt-`.
+- **A backtick inside the CSS template literals truncates the stylesheet silently.** With an even
+  number of them the file still parses — `node --check` sees nothing wrong — while everything after
+  the first one stops being CSS. `tools/build.py` refuses to build if it finds one.
 - **`InstancedMesh` colours take no `vertexColors` flag.** `setColorAt` populates `instanceColor`
   and three defines `USE_INSTANCING_COLOR` itself. Adding `vertexColors: true` also defines
   `USE_COLOR`, the shader then reads a per-vertex `color` attribute a `BoxGeometry` doesn't have,

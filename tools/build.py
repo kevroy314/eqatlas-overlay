@@ -19,7 +19,7 @@ SRC = (ROOT / 'eqtrail-overlay.js').read_text()
 DOCS = ROOT / 'docs'
 EXT = DOCS / 'extension'
 
-VERSION = '0.7.0'
+VERSION = '0.7.1'
 REPO = 'https://github.com/kevroy314/eqatlas-overlay'
 PAGES = 'https://kevroy314.github.io/eqatlas-overlay'
 USER_JS_URL = f'{PAGES}/eqtrail.user.js'
@@ -54,6 +54,20 @@ BOOT = """(function () {
   }
 })();
 """
+
+
+def check_css_literals(src):
+    """A backtick inside one of the CSS template literals does NOT raise a syntax error — the first
+    one closes the literal and the next one opens a new one, so the file still parses while the
+    stylesheet is silently truncated at that point. `node --check` cannot see it. This can, and it
+    has caught it twice: once in a shader comment, once in a CSS comment."""
+    for name in ('const CSS = `', 'const STATS_CSS = `'):
+        i = src.index(name) + len(name)
+        j = src.index('`;', i)
+        if '`' in src[i:j]:
+            line = src[:i + src[i:j].index('`')].count('\n') + 1
+            raise SystemExit(f'BUILD ABORTED: stray backtick inside {name.strip(" =`")} '
+                             f'at line {line} — it truncates the stylesheet silently.')
 
 
 def bundle(flavour, pinned=False, version=VERSION, src=None):
@@ -114,6 +128,7 @@ def update_versions_json():
 
 
 def main():
+    check_css_literals(SRC)
     EXT.mkdir(parents=True, exist_ok=True)
     body = bundle('userscript')
 
