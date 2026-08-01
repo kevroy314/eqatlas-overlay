@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Install &amp; update — EQ Trail wiki</title>
+<meta name="description" content="Two minutes, one time. After that it updates itself.">
+<link rel="stylesheet" href="wiki.css">
+</head>
+<body>
+<div class="shell">
+<nav class="side">
+  <a class="brand" href="index.html">EQ&nbsp;Trail<span>.</span></a>
+  <div class="tag">wiki</div>
+  <div class="cols">
+    <h5>Start here</h5>
+    <a href="index.html">Overview</a>
+    <a href="install.html" class="on">Install & update</a>
+    <a href="logs.html">Your log file</a>
+    <h5>The map</h5>
+    <a href="trail.html">The trail</a>
+    <a href="heatmap.html">The heatmap</a>
+    <a href="gaps.html">Long gaps</a>
+    <a href="deaths.html">Deaths</a>
+    <h5>Panels</h5>
+    <a href="session.html">Session stats</a>
+    <a href="interface.html">Panels & hotkeys</a>
+    <h5>Help</h5>
+    <a href="faq.html">FAQ</a>
+  </div>
+</nav>
+<main>
+<h1>Install &amp; update</h1>
+<p class="lede">Two minutes, one time. After that it
+updates itself.</p>
+<h2>Userscript — recommended</h2>
+
+<p>Works the same in Chrome, Edge and Firefox.</p>
+
+<ol>
+  <li>Install <b>Tampermonkey</b> from your browser's own extension store —
+    <a href="https://chromewebstore.google.com/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo">Chrome</a> ·
+    <a href="https://microsoftedge.microsoft.com/addons/detail/tampermonkey/iikmkjmpaadaobahmlepeloendndfphd">Edge</a> ·
+    <a href="https://addons.mozilla.org/firefox/addon/tampermonkey/">Firefox</a>.</li>
+  <li>Click <a href="../eqtrail.user.js"><b>Install EQ Trail</b></a>. Tampermonkey shows an install
+    page — click <b>Install</b>.</li>
+  <li>Go to <a href="https://eqltools.com/atlas">eqltools.com/atlas</a> and pick a zone. A
+    <b>Trail</b> panel appears bottom-right.</li>
+</ol>
+
+<h2>Updating</h2>
+
+<p>The script carries an <code>@updateURL</code>, so Tampermonkey pulls new versions on its own
+schedule. To get one immediately: <b>Tampermonkey icon → Check for userscript updates</b>, or simply
+click the install link again.</p>
+
+<p>Your saved settings and panel positions survive an update.</p>
+
+<div class="note">
+  <b>Only one copy should be installed.</b> Open the Tampermonkey dashboard and check there is a
+  single <i>EQ Trail</i> entry. Versions from 0.2.0 onward update in place. If you installed
+  <b>0.1.0</b>, that was before the script's identity was stabilised and it shows up as a separate
+  entry — delete the older one. (Two copies is not fatal: each one wipes the other's panels on load,
+  so you get one working panel rather than two broken ones. It is still worth tidying.)
+</div>
+
+<h2>Browser extension instead</h2>
+
+<p><a href="../eqtrail-extension.zip">Download the extension zip</a>, unzip it, then in Chrome or
+Edge open <code>chrome://extensions</code>, turn on <b>Developer mode</b>, and choose <b>Load
+unpacked</b> → the unzipped folder. Firefox requires signed add-ons for a permanent install, so on
+Firefox use the userscript.</p>
+
+<h2>No install at all</h2>
+
+<p>Open a zone on the Atlas, open the developer console, and paste the contents of
+<a href="https://github.com/kevroy314/eqatlas-overlay/blob/main/eqtrail-overlay.js"><code>eqtrail-overlay.js</code></a>.
+Same overlay — the packaged builds are that file plus a "wait until the page is ready" wrapper. It
+lasts until you reload.</p>
+
+<h2>Uninstalling</h2>
+
+<p>Remove the script from the Tampermonkey dashboard (or the extension from
+<code>chrome://extensions</code>). To clear saved settings as well, run this in the console on the
+Atlas page:</p>
+
+<pre><code>localStorage.removeItem('eqtrail.settings.v1')</code></pre>
+<footer>
+  <a href="../index.html">← Install page</a> ·
+  <a href="https://github.com/kevroy314/eqatlas-overlay">Source</a> ·
+  <a href="https://github.com/kevroy314/eqatlas-overlay/blob/main/CHANGELOG.md">Changelog</a><br><br>
+  A fan tool. Zone geometry, maps and data are © <a href="https://eqltools.com">eqltools.com</a> —
+  sources at <a href="https://eqltools.com/sources">eqltools.com/sources</a>.
+  Not affiliated with EQL&nbsp;Tools or Daybreak Game Company.
+</footer>
+</main>
+</div>
+</body>
+</html>

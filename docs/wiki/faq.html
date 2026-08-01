@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FAQ — EQ Trail wiki</title>
+<meta name="description" content="The things that actually come up.">
+<link rel="stylesheet" href="wiki.css">
+</head>
+<body>
+<div class="shell">
+<nav class="side">
+  <a class="brand" href="index.html">EQ&nbsp;Trail<span>.</span></a>
+  <div class="tag">wiki</div>
+  <div class="cols">
+    <h5>Start here</h5>
+    <a href="index.html">Overview</a>
+    <a href="install.html">Install & update</a>
+    <a href="logs.html">Your log file</a>
+    <h5>The map</h5>
+    <a href="trail.html">The trail</a>
+    <a href="heatmap.html">The heatmap</a>
+    <a href="gaps.html">Long gaps</a>
+    <a href="deaths.html">Deaths</a>
+    <h5>Panels</h5>
+    <a href="session.html">Session stats</a>
+    <a href="interface.html">Panels & hotkeys</a>
+    <h5>Help</h5>
+    <a href="faq.html" class="on">FAQ</a>
+  </div>
+</nav>
+<main>
+<h1>FAQ</h1>
+<p class="lede">The things that actually come up.</p>
+<h2>Privacy and safety</h2>
+
+<details><summary>Does my log get uploaded anywhere?</summary><div class="body">
+<p>No. The file is read and drawn entirely in your own browser. Nothing is sent anywhere, and the
+page that hands you the script has no server behind it — it is static hosting. The only thing saved
+is your <i>settings</i>, in your own browser's local storage.</p>
+</div></details>
+
+<details><summary>Is this affiliated with EQL Tools?</summary><div class="body">
+<p>No. It is a fan tool that runs on top of their Zone Atlas. It re-hosts none of their map data —
+it adds objects to the page you already have open, which costs them one ordinary page view. Zone
+geometry and data are theirs.</p>
+</div></details>
+
+<h2>Nothing is showing up</h2>
+
+<details><summary>I dropped my log and nothing happened</summary><div class="body">
+<p>Check the panel — it should tell you. The most common cause is that the log has no
+<code>/loc</code> lines at all, in which case it says so explicitly. Vanilla EverQuest only writes a
+position when you type <code>/loc</code>, so if your macro was not running, there is nothing to
+draw.</p>
+</div></details>
+
+<details><summary>The panel never appeared</summary><div class="body">
+<p>Make sure you are on a zone page (<code>eqltools.com/atlas?zone=…</code>) and that the 3D view has
+finished loading. Open the console: EQ Trail logs <code>[EQTrail] ready</code> when it attaches, and
+says so plainly if the page never published the handle it hooks into.</p>
+<p>Also check <kbd>H</kbd> — you may have hidden the panels.</p>
+</div></details>
+
+<details><summary>My log has thousands of locs but only some are drawn</summary><div class="body">
+<p>Only one zone is drawn at a time. The panel's stat line reads something like
+<i>"3526 locs here of 3838 in 8 zones"</i> — the rest are in other zones. Use the <b>zone</b>
+dropdown.</p>
+</div></details>
+
+<h2>It looks wrong</h2>
+
+<details><summary>My trail is in the wrong place, or rotated 90°</summary><div class="body">
+<p>Try the <b>swap X/Y</b> button. EQ Trail reads <code>/loc</code> as <b>east, north, up</b>, which
+is what two different clients were measured to print. If yours prints north first, that button fixes
+it. If it helps, please say so — it would be worth knowing which client does that.</p>
+</div></details>
+
+<details><summary>The heatmap is one huge hotspot and everything else is dark</summary><div class="body">
+<p>Usually a long AFK or camp soaking up the top of the colour range. Two things to try:</p>
+<p>1. Check the <b>gaps</b> setting — with <code>real</code> selected, every second of a two-hour
+idle counts in full. <code>skip</code> caps it.</p>
+<p>2. Switch <b>weight</b> to <code>visits</code>. If your macro only fires while you move, "time per
+cell" is not measuring what you think — see <a href="logs.html">Your log file</a>.</p>
+</div></details>
+
+<details><summary>There is a straight line across the zone that I never walked</summary><div class="body">
+<p>That should not happen — the trail breaks when samples are more than five minutes apart, exactly
+to avoid it. If you are seeing one, the two samples either side are less than five minutes apart but
+far away in space, which usually means a zone-out and back, or a death and a bind-point respawn.</p>
+</div></details>
+
+<details><summary>My session plays back much faster than it really was</summary><div class="body">
+<p>That is <b>gaps: skip</b> doing its job — it removes idle time from the playback. The line under
+the gap controls tells you exactly how much was removed. Set it to <code>real</code> for true
+one-to-one time.</p>
+</div></details>
+
+<details><summary>Why are there no gravestones when I definitely died?</summary><div class="body">
+<p>Three possibilities, and the panel usually tells you which: the deaths are later in the session
+than the playhead has reached; they are in a different zone; or there was no <code>/loc</code> near
+them so no stone could be placed. See <a href="deaths.html">Deaths</a>.</p>
+</div></details>
+
+<details><summary>My accuracy seems low</summary><div class="body">
+<p>Misses include parries, dodges and blocks, not just clean misses — anything of the form
+<i>"You try to X, but …"</i>. A figure around two-thirds is unremarkable.</p>
+</div></details>
+
+<h2>Using it</h2>
+
+<details><summary>What macro should I use?</summary><div class="body">
+<p>Anything that emits <code>/loc</code> repeatedly. A <b>fixed interval</b> gives the best data,
+because then time and traffic agree and <b>weight: time</b> is meaningful. A <code>/loc</code> bound
+to your movement keys also works, but it measures traffic rather than dwell — use
+<b>weight: visits</b> with that kind of log.</p>
+</div></details>
+
+<details><summary>Can I use this with P1999 / Quarm / live EQ?</summary><div class="body">
+<p>Yes — any client that writes a standard <code>eqlog_*.txt</code>. It has been tested against logs
+from EQ Legends and from P1999 Green. The limit is not the client, it is whether the Atlas has a map
+for the zone you were in; zones it does not carry are marked <code>no map</code>.</p>
+</div></details>
+
+<details><summary>How do I record a clean video?</summary><div class="body">
+<p><kbd>Shift</kbd>+<kbd>H</kbd> hides the Atlas's chrome along with the EQ Trail panels, leaving the
+map filling the window. Set up your view and playback speed first, then hide, then record. The
+corner reminder fades out on its own so it will not appear in the capture.</p>
+</div></details>
+
+<details><summary>Can I see two characters, or two sessions, at once?</summary><div class="body">
+<p>Not currently — dropping a second log replaces the first. If that would be useful, it is worth
+raising as an issue.</p>
+</div></details>
+
+<details><summary>Does it slow my browser down?</summary><div class="body">
+<p>Parsing is streamed in slices, so even a 121 MB log parses in about three seconds without
+freezing the tab. Drawing is a handful of objects added to a scene the Atlas is already rendering.</p>
+</div></details>
+
+<h2>Installing</h2>
+
+<details><summary>How do I force an update?</summary><div class="body">
+<p>Tampermonkey icon → <b>Check for userscript updates</b>. Or click the install link again. Your
+settings survive.</p>
+</div></details>
+
+<details><summary>I think I have two copies installed</summary><div class="body">
+<p>Open the Tampermonkey dashboard and look for more than one <i>EQ Trail</i> entry. Versions from
+0.2.0 onward update in place; an 0.1.0 install predates that and shows separately. Delete the older
+one. Two copies will not break anything visible — each one tears the other's panels down on load, so
+you get one working panel — but it is still worth tidying.</p>
+</div></details>
+
+<details><summary>Can I use it without Tampermonkey?</summary><div class="body">
+<p>Yes — there is an unpacked browser extension, and you can also just paste the script into the
+console. See <a href="install.html">Install &amp; update</a>.</p>
+</div></details>
+<footer>
+  <a href="../index.html">← Install page</a> ·
+  <a href="https://github.com/kevroy314/eqatlas-overlay">Source</a> ·
+  <a href="https://github.com/kevroy314/eqatlas-overlay/blob/main/CHANGELOG.md">Changelog</a><br><br>
+  A fan tool. Zone geometry, maps and data are © <a href="https://eqltools.com">eqltools.com</a> —
+  sources at <a href="https://eqltools.com/sources">eqltools.com/sources</a>.
+  Not affiliated with EQL&nbsp;Tools or Daybreak Game Company.
+</footer>
+</main>
+</div>
+</body>
+</html>

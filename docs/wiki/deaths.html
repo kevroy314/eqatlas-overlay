@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deaths — EQ Trail wiki</title>
+<meta name="description" content="A gravestone marks each death, appearing in sequence as the trail reaches it.">
+<link rel="stylesheet" href="wiki.css">
+</head>
+<body>
+<div class="shell">
+<nav class="side">
+  <a class="brand" href="index.html">EQ&nbsp;Trail<span>.</span></a>
+  <div class="tag">wiki</div>
+  <div class="cols">
+    <h5>Start here</h5>
+    <a href="index.html">Overview</a>
+    <a href="install.html">Install & update</a>
+    <a href="logs.html">Your log file</a>
+    <h5>The map</h5>
+    <a href="trail.html">The trail</a>
+    <a href="heatmap.html">The heatmap</a>
+    <a href="gaps.html">Long gaps</a>
+    <a href="deaths.html" class="on">Deaths</a>
+    <h5>Panels</h5>
+    <a href="session.html">Session stats</a>
+    <a href="interface.html">Panels & hotkeys</a>
+    <h5>Help</h5>
+    <a href="faq.html">FAQ</a>
+  </div>
+</nav>
+<main>
+<h1>Deaths</h1>
+<p class="lede">A gravestone marks each death, appearing in sequence as the
+trail reaches it.</p>
+<figure>
+  <img src="../gravestone.jpg" alt="A pale headstone with a cross standing among trees on an island, with the trail and heatmap around it.">
+  <figcaption>A death, marked where the <code>/loc</code> track says you were standing.</figcaption>
+</figure>
+
+<p>Toggle them with <b>deaths</b> in the layers row. On by default.</p>
+
+<h2>Where the stone goes</h2>
+
+<p>The death line in your log carries no coordinates — only a time. So the position has to come from
+your own <code>/loc</code> track at that timestamp:</p>
+
+<ul>
+  <li>If the samples either side are <b>close together</b>, the position is interpolated between
+      them.</li>
+  <li>If they are <b>far apart</b> — the macro stopped, or you died and stood still — it stays put on
+      the last <i>known</i> sample instead of inventing a spot halfway to wherever you went next.</li>
+  <li>If there is <b>no sample within five minutes</b>, no stone is placed at all.</li>
+</ul>
+
+<div class="note">
+  <b>A confident marker in the wrong place is worse than no marker.</b> When deaths cannot be placed,
+  the panel says so — <i>"5 deaths, none placeable"</i> — rather than going quietly empty, because
+  silence there looks like a bug rather than like missing data.
+</div>
+
+<h2>Why you might not see any</h2>
+
+<ul>
+  <li><b>They are later in the session than the playhead.</b> Stones appear in sequence. In one real
+      log all six deaths fall in the last 90 minutes of a seven-hour session, so nothing shows until
+      the scrubber is about three-quarters across.</li>
+  <li><b>Your deaths are in a different zone</b> than the one being drawn. Check the <b>zone</b>
+      dropdown.</li>
+  <li><b>They could not be placed</b> — a sparse log with no <code>/loc</code> near the death. The
+      panel will say so.</li>
+</ul>
+
+<h2>How it is drawn</h2>
+
+<p>A camera-facing sprite, so the icon stays legible from any orbit angle, drawn with one of
+three.js's own materials so it respects the Atlas's logarithmic depth buffer and sits correctly
+behind terrain.</p>
+<footer>
+  <a href="../index.html">← Install page</a> ·
+  <a href="https://github.com/kevroy314/eqatlas-overlay">Source</a> ·
+  <a href="https://github.com/kevroy314/eqatlas-overlay/blob/main/CHANGELOG.md">Changelog</a><br><br>
+  A fan tool. Zone geometry, maps and data are © <a href="https://eqltools.com">eqltools.com</a> —
+  sources at <a href="https://eqltools.com/sources">eqltools.com/sources</a>.
+  Not affiliated with EQL&nbsp;Tools or Daybreak Game Company.
+</footer>
+</main>
+</div>
+</body>
+</html>

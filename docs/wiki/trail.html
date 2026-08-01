@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The trail — EQ Trail wiki</title>
+<meta name="description" content="The animated path: your &lt;code&gt;/loc&lt;/code&gt; track played back over the real zone geometry.">
+<link rel="stylesheet" href="wiki.css">
+</head>
+<body>
+<div class="shell">
+<nav class="side">
+  <a class="brand" href="index.html">EQ&nbsp;Trail<span>.</span></a>
+  <div class="tag">wiki</div>
+  <div class="cols">
+    <h5>Start here</h5>
+    <a href="index.html">Overview</a>
+    <a href="install.html">Install & update</a>
+    <a href="logs.html">Your log file</a>
+    <h5>The map</h5>
+    <a href="trail.html" class="on">The trail</a>
+    <a href="heatmap.html">The heatmap</a>
+    <a href="gaps.html">Long gaps</a>
+    <a href="deaths.html">Deaths</a>
+    <h5>Panels</h5>
+    <a href="session.html">Session stats</a>
+    <a href="interface.html">Panels & hotkeys</a>
+    <h5>Help</h5>
+    <a href="faq.html">FAQ</a>
+  </div>
+</nav>
+<main>
+<h1>The trail</h1>
+<p class="lede">The animated path: your <code>/loc</code> track played
+back over the real zone geometry.</p>
+<h2>Playback</h2>
+
+<table>
+  <tr><th>Control</th><th>What it does</th></tr>
+  <tr><td>▶ / scrub</td><td>Play, pause, or drag to any moment in the session.</td></tr>
+  <tr><td>speed</td><td>Log-seconds per real second.</td></tr>
+  <tr><td>trail</td><td>How much track stays lit behind the moving head.</td></tr>
+  <tr><td>ghost</td><td>Opacity of the route not yet walked. 0 hides it entirely.</td></tr>
+  <tr><td>colour</td><td>Tint by <b>time</b> (when you were there) or <b>speed</b> (how fast).</td></tr>
+</table>
+
+<p>A white marker leads the trail with a dashed column beneath it, so you can find "now" even when
+it is behind a hill. The section of track just behind the head burns brighter and fades out over the
+length set by <b>trail</b>.</p>
+
+<h2>Why the trail sometimes breaks</h2>
+
+<p>Consecutive samples more than <b>five minutes</b> apart start a new run rather than joining.
+Without that rule, two <code>/loc</code>s from either side of a camp — or from different days
+entirely — would be drawn as a confident straight line across the zone, which is a claim your log
+never made.</p>
+
+<div class="note">
+  <b>This is a drawing rule, not a time rule.</b> It decides where the ribbon is <i>cut</i>. How long
+  the playhead <i>lingers</i> in a gap is a separate setting — see <a href="gaps.html">Long gaps</a>.
+  They are deliberately independent: tying them together would shred the trail into fragments on a
+  <code>/loc</code>-on-move macro.
+</div>
+
+<h2>It rides the Atlas's own view</h2>
+
+<p>The trail is added into the Atlas's floor-band groups rather than dropped into the scene, so it
+follows the exploded-floors animation, the height slider and the per-floor visibility exactly like
+the site's own markers. In a multi-storey zone, pulling the floors apart pulls your trail apart with
+them.</p>
+<footer>
+  <a href="../index.html">← Install page</a> ·
+  <a href="https://github.com/kevroy314/eqatlas-overlay">Source</a> ·
+  <a href="https://github.com/kevroy314/eqatlas-overlay/blob/main/CHANGELOG.md">Changelog</a><br><br>
+  A fan tool. Zone geometry, maps and data are © <a href="https://eqltools.com">eqltools.com</a> —
+  sources at <a href="https://eqltools.com/sources">eqltools.com/sources</a>.
+  Not affiliated with EQL&nbsp;Tools or Daybreak Game Company.
+</footer>
+</main>
+</div>
+</body>
+</html>

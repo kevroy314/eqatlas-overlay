@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Long gaps — EQ Trail wiki</title>
+<meta name="description" content="Camping, AFK, and the boring bits — what to do about the silences in a &lt;code&gt;/loc&lt;/code&gt; stream.">
+<link rel="stylesheet" href="wiki.css">
+</head>
+<body>
+<div class="shell">
+<nav class="side">
+  <a class="brand" href="index.html">EQ&nbsp;Trail<span>.</span></a>
+  <div class="tag">wiki</div>
+  <div class="cols">
+    <h5>Start here</h5>
+    <a href="index.html">Overview</a>
+    <a href="install.html">Install & update</a>
+    <a href="logs.html">Your log file</a>
+    <h5>The map</h5>
+    <a href="trail.html">The trail</a>
+    <a href="heatmap.html">The heatmap</a>
+    <a href="gaps.html" class="on">Long gaps</a>
+    <a href="deaths.html">Deaths</a>
+    <h5>Panels</h5>
+    <a href="session.html">Session stats</a>
+    <a href="interface.html">Panels & hotkeys</a>
+    <h5>Help</h5>
+    <a href="faq.html">FAQ</a>
+  </div>
+</nav>
+<main>
+<h1>Long gaps</h1>
+<p class="lede">Camping, AFK, and the boring bits — what to do about the
+silences in a <code>/loc</code> stream.</p>
+<h2>The problem</h2>
+
+<p>A <code>/loc</code> stream is not continuous. The macro stops, you camp a spawn, you go and make a
+coffee. Measured on a real seven-hour session:</p>
+
+<pre><code>58 gaps longer than a minute, totalling 1h50 — 26% of the session</code></pre>
+
+<p>Played back as-is, that is a quarter of the runtime spent watching a dot that is not moving. And
+because a zone's repeat visits are merged into one series, it gets worse: in one test log the
+Emerald Jungle's two visits are <b>187 days apart</b>. At any playback speed you would care to use,
+that session was simply unwatchable before this feature existed.</p>
+
+<h2>The three modes</h2>
+
+<table>
+  <tr><th>Mode</th><th>Effect</th></tr>
+  <tr><td>skip</td><td>Discard the excess beyond the threshold. <b>The default.</b></td></tr>
+  <tr><td>fast fwd</td><td>Divide the excess by the speed-up factor (10× by default).</td></tr>
+  <tr><td>real</td><td>A gap is time like any other. Nothing is done.</td></tr>
+</table>
+
+<p><b>over</b> sets how long a silence has to be before it counts as a gap (60 s by default).
+<b>speed-up</b> is the fast-forward divisor, and only appears in <code>fast fwd</code>. Below the
+controls, a line tells you what the current settings are actually doing to your session — for
+example <i>"58 gaps · 1h50 of 7h00 removed from playback"</i>.</p>
+
+<h2>applies to — and why it exists</h2>
+
+<p><code>skip</code> deliberately means something <b>different for each layer</b>:</p>
+
+<ul>
+  <li><b>Animation</b> — the gap is <i>jumped</i>. There is nothing to watch.</li>
+  <li><b>Heatmap</b> — the interval is <i>capped</i> at the threshold, not zeroed. Zeroing it would
+      erase a camp from the map entirely, and a camp is exactly the thing the heatmap exists to
+      show.</li>
+</ul>
+
+<p>Same rule — discard the excess — but a different baseline, because the two layers are asking
+different questions about the same silence. On the trail a long pause is dead air; on the map it is
+often the most interesting thing in the session.</p>
+
+<p><b>applies to</b> is how you resolve that when the defaults are not what you want:</p>
+
+<table>
+  <tr><th>Setting</th><th>Result</th></tr>
+  <tr><td>both</td><td>The policy touches the animation and the heat weights. Default.</td></tr>
+  <tr><td>path</td><td>Playback skips the dead air; the heatmap counts every second in full.</td></tr>
+  <tr><td>heat</td><td>Playback runs in real time; the heatmap discounts long pauses.</td></tr>
+</table>
+
+<h2>How it works</h2>
+
+<p>Playback runs on a <b>presentation clock</b>, related to your log's clock by a piecewise-linear
+map: ordinary intervals map one-to-one, gaps map through whichever policy you chose. So skipping is
+not a special case bolted onto the animation — it is simply a zero-length stretch of that map, and
+everything downstream (the trail, the gravestones, the Session numbers) carries on working in real
+log time. Only the <i>pacing</i> changes.</p>
+
+<p>Two consequences worth knowing:</p>
+
+<ul>
+  <li>The <b>scrubber follows the presentation clock</b>, so dragging it gives even attention to the
+      parts of your session where something actually happens.</li>
+  <li>Changing the mode <b>keeps you at the same moment</b> in the log rather than at the same
+      fraction of the bar — otherwise the playhead would appear to jump every time you touched the
+      setting.</li>
+</ul>
+
+<div class="note tip">
+  <b>While the playhead crosses a compressed gap</b>, the readout at the top of the panel shows how
+  long that gap was, so a sudden jump reads as a deliberate skip rather than as a glitch.
+</div>
+
+<h2>Not to be confused with the ribbon break</h2>
+
+<p>The trail also <i>breaks</i> when samples are more than five minutes apart. That is a separate,
+fixed drawing rule about where the ribbon is cut — see <a href="trail.html">The trail</a>. The gap
+settings on this page are about <i>time</i>: how long the playhead lingers and how much dwell a cell
+is credited. They are kept independent on purpose.</p>
+<footer>
+  <a href="../index.html">← Install page</a> ·
+  <a href="https://github.com/kevroy314/eqatlas-overlay">Source</a> ·
+  <a href="https://github.com/kevroy314/eqatlas-overlay/blob/main/CHANGELOG.md">Changelog</a><br><br>
+  A fan tool. Zone geometry, maps and data are © <a href="https://eqltools.com">eqltools.com</a> —
+  sources at <a href="https://eqltools.com/sources">eqltools.com/sources</a>.
+  Not affiliated with EQL&nbsp;Tools or Daybreak Game Company.
+</footer>
+</main>
+</div>
+</body>
+</html>

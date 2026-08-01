@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The heatmap — EQ Trail wiki</title>
+<meta name="description" content="Where the time actually went, binned into cells and painted onto the zone — flat on the ground, or standing up as relief.">
+<link rel="stylesheet" href="wiki.css">
+</head>
+<body>
+<div class="shell">
+<nav class="side">
+  <a class="brand" href="index.html">EQ&nbsp;Trail<span>.</span></a>
+  <div class="tag">wiki</div>
+  <div class="cols">
+    <h5>Start here</h5>
+    <a href="index.html">Overview</a>
+    <a href="install.html">Install & update</a>
+    <a href="logs.html">Your log file</a>
+    <h5>The map</h5>
+    <a href="trail.html">The trail</a>
+    <a href="heatmap.html" class="on">The heatmap</a>
+    <a href="gaps.html">Long gaps</a>
+    <a href="deaths.html">Deaths</a>
+    <h5>Panels</h5>
+    <a href="session.html">Session stats</a>
+    <a href="interface.html">Panels & hotkeys</a>
+    <h5>Help</h5>
+    <a href="faq.html">FAQ</a>
+  </div>
+</nav>
+<main>
+<h1>The heatmap</h1>
+<p class="lede">Where the time actually went, binned into cells and
+painted onto the zone — flat on the ground, or standing up as relief.</p>
+<figure>
+  <img src="../heatmap-flat.jpg" alt="An island with the heatmap painted flat across the terrain, magenta at the edges and yellow-white at the centre.">
+  <figcaption><b>relief: flat</b> paints the dwell straight onto the ground instead of standing it up.</figcaption>
+</figure>
+
+<h2>Controls</h2>
+
+<table>
+  <tr><th>Control</th><th>What it does</th></tr>
+  <tr><td>cell</td><td>Bin size. The colour bar's caption tells you the real size in loc units.</td></tr>
+  <tr><td>relief</td><td><code>flat</code> paints the floor; higher extrudes the heat upward.</td></tr>
+  <tr><td>opacity</td><td>How strongly it sits over the terrain.</td></tr>
+  <tr><td>weight</td><td><b>time</b> = seconds per cell · <b>visits</b> = number of samples.</td></tr>
+</table>
+
+<h2>time vs visits</h2>
+
+<p>Which one is <i>honest</i> depends on your macro — see
+<a href="logs.html">Your log file</a>. In short: a fixed-interval <code>/loc</code> makes the two
+nearly equivalent and <b>time</b> is the better read; a <code>/loc</code> bound to your movement keys
+emits nothing while you stand still, so <b>visits</b> is the truthful choice there and it measures
+traffic rather than dwell.</p>
+
+<p>The colour bar is labelled in real units and follows the mode — minutes and seconds per cell, or
+sample counts.</p>
+
+<h2>Height comes from your own elevation</h2>
+
+<p>Each cell sits at the median height of the samples in it, taken from the <code>up</code> value in
+your log. So in a multi-storey zone the heat lands on the floor you actually walked, with no
+raycasting and no guessing.</p>
+
+<h2>Why one cell does not swallow the whole scale</h2>
+
+<p>Long silences are discounted before they become dwell — otherwise a single AFK stretch would take
+the top of the colour ramp and flatten everything else into the dark end. How that discount works,
+and how to turn it off, is <a href="gaps.html">Long gaps</a>.</p>
+<footer>
+  <a href="../index.html">← Install page</a> ·
+  <a href="https://github.com/kevroy314/eqatlas-overlay">Source</a> ·
+  <a href="https://github.com/kevroy314/eqatlas-overlay/blob/main/CHANGELOG.md">Changelog</a><br><br>
+  A fan tool. Zone geometry, maps and data are © <a href="https://eqltools.com">eqltools.com</a> —
+  sources at <a href="https://eqltools.com/sources">eqltools.com/sources</a>.
+  Not affiliated with EQL&nbsp;Tools or Daybreak Game Company.
+</footer>
+</main>
+</div>
+</body>
+</html>

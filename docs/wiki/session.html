@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Session stats — EQ Trail wiki</title>
+<meta name="description" content="Eleven numbers read straight out of your log, all counting up in step with the playback.">
+<link rel="stylesheet" href="wiki.css">
+</head>
+<body>
+<div class="shell">
+<nav class="side">
+  <a class="brand" href="index.html">EQ&nbsp;Trail<span>.</span></a>
+  <div class="tag">wiki</div>
+  <div class="cols">
+    <h5>Start here</h5>
+    <a href="index.html">Overview</a>
+    <a href="install.html">Install & update</a>
+    <a href="logs.html">Your log file</a>
+    <h5>The map</h5>
+    <a href="trail.html">The trail</a>
+    <a href="heatmap.html">The heatmap</a>
+    <a href="gaps.html">Long gaps</a>
+    <a href="deaths.html">Deaths</a>
+    <h5>Panels</h5>
+    <a href="session.html" class="on">Session stats</a>
+    <a href="interface.html">Panels & hotkeys</a>
+    <h5>Help</h5>
+    <a href="faq.html">FAQ</a>
+  </div>
+</nav>
+<main>
+<h1>Session stats</h1>
+<p class="lede">Eleven numbers read straight out of your log,
+all counting up in step with the playback.</p>
+<figure>
+  <img src="../session.jpg" alt="The Session panel: stat cards above a chart with cumulative curves and a playhead.">
+  <figcaption>The Session panel part-way through a real session.</figcaption>
+</figure>
+
+<h2>The cards</h2>
+
+<table>
+  <tr><th>Card</th><th>Read from</th></tr>
+  <tr><td>Damage dealt</td><td><code>You &lt;verb&gt; X for N points of damage</code></td></tr>
+  <tr><td>Damage taken</td><td><code>… hits YOU for N points of damage</code></td></tr>
+  <tr><td>Kills</td><td><code>You have slain X!</code></td></tr>
+  <tr><td>Deaths</td><td><code>You have been slain by X!</code></td></tr>
+  <tr><td>Experience</td><td><code>You gain experience! (4.000%)</code></td></tr>
+  <tr><td>Levels</td><td><code>You have gained a level!</code></td></tr>
+  <tr><td>Coin</td><td><code>You receive … from the corpse</code></td></tr>
+  <tr><td>Items looted</td><td><code>You looted X</code></td></tr>
+  <tr><td>Distance</td><td>your <code>/loc</code> track itself</td></tr>
+  <tr><td>Accuracy</td><td>swings that landed ÷ swings taken</td></tr>
+  <tr><td>Evasion</td><td>incoming attacks that missed ÷ attacks at you</td></tr>
+</table>
+
+<p><b>Distance</b> is the odd one out — it is measured from your own track rather than from a line of
+text, which is why it agrees with the map. It respects the same gap rule as the trail, so a
+five-day pause is not counted as a sprint across the zone.</p>
+
+<div class="note">
+  <b>How dealt and taken are told apart:</b> <code>YOU</code> in capitals is how EverQuest marks you
+  as the <i>target</i> of a swing. Anything else beginning "You&nbsp;…" is you swinging. That single
+  distinction splits the whole combat log.
+</div>
+
+<h2>The chart</h2>
+
+<p>Click any card to add it to the plot, click again to remove it. Curves are cumulative and are
+revealed as the playhead sweeps across, with the part you have not reached yet drawn faint.</p>
+
+<p>With <b>one</b> metric selected the axis is in that metric's own units. With <b>several</b>, each
+is drawn as a share of its own session total, and the axis says so.</p>
+
+<div class="note">
+  <b>Why not a second y-axis?</b> Because 92,000 damage and 6 deaths have no shared scale, and two
+  axes side by side make every crossing point look like a relationship when it is really an artifact
+  of whichever ranges were chosen. Normalising to each metric's own total is the honest way to put
+  them on one chart.
+</div>
+
+<h2>Accuracy and evasion get their own band</h2>
+
+<p>They are percentages, and percentages already carry a natural, self-describing 0–100% scale — so
+they share one axis <i>with each other</i>, in a strip beneath the main chart, and none with the
+cumulative curves. The band only appears when you select a ratio, and draws nothing before your first
+swing rather than implying 0%.</p>
+
+<p>Both are running ratios "so far", matching every other number on the panel, so they settle as the
+session goes on rather than twitching fight to fight.</p>
+<footer>
+  <a href="../index.html">← Install page</a> ·
+  <a href="https://github.com/kevroy314/eqatlas-overlay">Source</a> ·
+  <a href="https://github.com/kevroy314/eqatlas-overlay/blob/main/CHANGELOG.md">Changelog</a><br><br>
+  A fan tool. Zone geometry, maps and data are © <a href="https://eqltools.com">eqltools.com</a> —
+  sources at <a href="https://eqltools.com/sources">eqltools.com/sources</a>.
+  Not affiliated with EQL&nbsp;Tools or Daybreak Game Company.
+</footer>
+</main>
+</div>
+</body>
+</html>

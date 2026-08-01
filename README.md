@@ -4,7 +4,8 @@ An overlay for the [EQL Tools Zone Atlas](https://eqltools.com/atlas). Drop an E
 on it and your `/loc` track plays back as an animated 3D trail over the real zone geometry, with a
 heatmap of where the time actually went.
 
-**→ [Install page](https://kevroy314.github.io/eqatlas-overlay/)** (two minutes, Tampermonkey)
+**→ [Install page](https://kevroy314.github.io/eqatlas-overlay/)** (two minutes, Tampermonkey) ·
+**[Wiki & FAQ](https://kevroy314.github.io/eqatlas-overlay/wiki/)**
 
 ![trail and relief heatmap over the Ocean of Tears](docs/relief-and-trail.jpg)
 
