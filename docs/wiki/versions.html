@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Versions &amp; feedback — EQ Trail wiki</title>
+<meta name="description" content="Knowing when there is an update, getting back off a bad one, and telling me when something is broken — none of which needs a server.">
+<link rel="stylesheet" href="wiki.css">
+</head>
+<body>
+<div class="shell">
+<nav class="side">
+  <a class="brand" href="index.html">EQ&nbsp;Trail<span>.</span></a>
+  <div class="tag">wiki</div>
+  <div class="cols">
+    <h5>Start here</h5>
+    <a href="index.html">Overview</a>
+    <a href="install.html">Install & update</a>
+    <a href="logs.html">Your log file</a>
+    <h5>The map</h5>
+    <a href="trail.html">The trail</a>
+    <a href="heatmap.html">The heatmap</a>
+    <a href="gaps.html">Long gaps</a>
+    <a href="deaths.html">Deaths</a>
+    <h5>Panels</h5>
+    <a href="session.html">Session stats</a>
+    <a href="interface.html">Panels & hotkeys</a>
+    <h5>Help</h5>
+    <a href="versions.html" class="on">Versions & feedback</a>
+    <a href="faq.html">FAQ</a>
+  </div>
+</nav>
+<main>
+<h1>Versions &amp; feedback</h1>
+<p class="lede">Knowing when there is an
+update, getting back off a bad one, and telling me when something is broken — none of which needs a
+server.</p>
+<p>The bottom of the Trail panel carries a small row:</p>
+
+<pre><code>v0.7.0 · update to 0.8.0 →
+[issue] [idea] [versions] [updates]</code></pre>
+
+<h2>Knowing about updates</h2>
+
+<p>The version line says which build you are running. When a newer one exists it becomes a link
+straight to the install page, and Tampermonkey takes it from there.</p>
+
+<p>This is the <b>only</b> network request EQ Trail ever makes: a plain fetch of one static JSON file
+from the project's own GitHub Pages, <b>cached for a day</b>, carrying no parameters and no
+information about you. If it fails — offline, a firewall, a page policy — it fails silently and the
+overlay carries on.</p>
+
+<div class="note">
+  <b>Turn it off with the <code>updates</code> button</b> and the overlay is entirely offline again,
+  which is how it behaved for its first six versions. The version number still shows; it just stops
+  looking for newer ones.
+</div>
+
+<h2>Going back a version</h2>
+
+<p><b>versions</b> lists recent releases. Each is a <b>pinned</b> build — it deliberately carries no
+update URL, so once installed it stays where it is. Without that, Tampermonkey would spot the newer
+release at the other end and quietly pull you straight back to the version you were escaping.</p>
+
+<p>Click one and Tampermonkey offers to install it, replacing what you have. Nothing else to do.</p>
+
+<div class="note">
+  <b>Coming back.</b> Versions before 0.7.0 have no version row, so once you roll back that far the
+  button to return is not there. Use <a href="install.html">the install page</a> — it always points
+  at the current release.
+</div>
+
+<h2>Reporting a problem or asking for something</h2>
+
+<p><b>issue</b> and <b>idea</b> open a GitHub issue form, pre-filled: a short prompt for what
+happened, plus a collapsed block of diagnostics. Nothing is sent until you press submit on GitHub,
+and you can edit or delete any of it first.</p>
+
+<h3>What the diagnostics contain</h3>
+
+<table>
+  <tr><th>Included</th><th>Never included</th></tr>
+  <tr><td class="wide">EQ Trail version and how it was installed<br>
+      Browser and graphics card<br>
+      Which zone is loaded, and the three.js version<br>
+      Counts — locs, zones, runs, gravestones, heat cells, gaps<br>
+      Your current settings</td>
+      <td class="wide">Your log file, or any part of it<br>
+      The file name — which carries your character name<br>
+      Any coordinate you visited<br>
+      Any timestamp from your session</td></tr>
+</table>
+
+<p>The counts are there because they are what makes a report actionable — "26 locs across 8 zones,
+3 runs, no gravestones" says more about a rendering bug than a paragraph of description usually
+does. If you would rather not send even that, delete the block before submitting.</p>
+
+<div class="note tip">
+  <b>Please do not paste log contents into an issue.</b> A description of what you were doing is
+  more useful and does not put your character's movements on the public internet. If a specific log
+  really is needed to reproduce something, say so in the issue and we can work out a way.
+</div>
+<footer>
+  <a href="../index.html">← Install page</a> ·
+  <a href="https://github.com/kevroy314/eqatlas-overlay">Source</a> ·
+  <a href="https://github.com/kevroy314/eqatlas-overlay/blob/main/CHANGELOG.md">Changelog</a><br><br>
+  A fan tool. Zone geometry, maps and data are © <a href="https://eqltools.com">eqltools.com</a> —
+  sources at <a href="https://eqltools.com/sources">eqltools.com/sources</a>.
+  Not affiliated with EQL&nbsp;Tools or Daybreak Game Company.
+</footer>
+</main>
+</div>
+</body>
+</html>

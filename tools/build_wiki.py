@@ -22,7 +22,7 @@ NAV = [
     ('The map', [('trail', 'The trail'), ('heatmap', 'The heatmap'), ('gaps', 'Long gaps'),
                  ('deaths', 'Deaths')]),
     ('Panels', [('session', 'Session stats'), ('interface', 'Panels & hotkeys')]),
-    ('Help', [('faq', 'FAQ')]),
+    ('Help', [('versions', 'Versions & feedback'), ('faq', 'FAQ')]),
 ]
 
 SHELL = """<!doctype html>
@@ -589,6 +589,77 @@ when you close it.</p>
 </table>
 """)
 
+# ============================================================================ versions
+page('versions', 'Versions & feedback', 'Versions &amp; feedback', """Knowing when there is an
+update, getting back off a bad one, and telling me when something is broken — none of which needs a
+server.""", """
+<p>The bottom of the Trail panel carries a small row:</p>
+
+<pre><code>v0.7.0 · update to 0.8.0 →
+[issue] [idea] [versions] [updates]</code></pre>
+
+<h2>Knowing about updates</h2>
+
+<p>The version line says which build you are running. When a newer one exists it becomes a link
+straight to the install page, and Tampermonkey takes it from there.</p>
+
+<p>This is the <b>only</b> network request EQ Trail ever makes: a plain fetch of one static JSON file
+from the project's own GitHub Pages, <b>cached for a day</b>, carrying no parameters and no
+information about you. If it fails — offline, a firewall, a page policy — it fails silently and the
+overlay carries on.</p>
+
+<div class="note">
+  <b>Turn it off with the <code>updates</code> button</b> and the overlay is entirely offline again,
+  which is how it behaved for its first six versions. The version number still shows; it just stops
+  looking for newer ones.
+</div>
+
+<h2>Going back a version</h2>
+
+<p><b>versions</b> lists recent releases. Each is a <b>pinned</b> build — it deliberately carries no
+update URL, so once installed it stays where it is. Without that, Tampermonkey would spot the newer
+release at the other end and quietly pull you straight back to the version you were escaping.</p>
+
+<p>Click one and Tampermonkey offers to install it, replacing what you have. Nothing else to do.</p>
+
+<div class="note">
+  <b>Coming back.</b> Versions before 0.7.0 have no version row, so once you roll back that far the
+  button to return is not there. Use <a href="install.html">the install page</a> — it always points
+  at the current release.
+</div>
+
+<h2>Reporting a problem or asking for something</h2>
+
+<p><b>issue</b> and <b>idea</b> open a GitHub issue form, pre-filled: a short prompt for what
+happened, plus a collapsed block of diagnostics. Nothing is sent until you press submit on GitHub,
+and you can edit or delete any of it first.</p>
+
+<h3>What the diagnostics contain</h3>
+
+<table>
+  <tr><th>Included</th><th>Never included</th></tr>
+  <tr><td class="wide">EQ Trail version and how it was installed<br>
+      Browser and graphics card<br>
+      Which zone is loaded, and the three.js version<br>
+      Counts — locs, zones, runs, gravestones, heat cells, gaps<br>
+      Your current settings</td>
+      <td class="wide">Your log file, or any part of it<br>
+      The file name — which carries your character name<br>
+      Any coordinate you visited<br>
+      Any timestamp from your session</td></tr>
+</table>
+
+<p>The counts are there because they are what makes a report actionable — "26 locs across 8 zones,
+3 runs, no gravestones" says more about a rendering bug than a paragraph of description usually
+does. If you would rather not send even that, delete the block before submitting.</p>
+
+<div class="note tip">
+  <b>Please do not paste log contents into an issue.</b> A description of what you were doing is
+  more useful and does not put your character's movements on the public internet. If a specific log
+  really is needed to reproduce something, say so in the issue and we can work out a way.
+</div>
+""")
+
 # ============================================================================ faq
 page('faq', 'FAQ', 'FAQ', """The things that actually come up.""", """
 <h2>Privacy and safety</h2>
@@ -695,6 +766,28 @@ raising as an issue.</p>
 <details><summary>Does it slow my browser down?</summary><div class="body">
 <p>Parsing is streamed in slices, so even a 121 MB log parses in about three seconds without
 freezing the tab. Drawing is a handful of objects added to a scene the Atlas is already rendering.</p>
+</div></details>
+
+<h2>Versions and feedback</h2>
+
+<details><summary>Does EQ Trail phone home?</summary><div class="body">
+<p>Once a day it fetches one static JSON file from the project's GitHub Pages to see whether a newer
+version exists. It sends no parameters and nothing about you, and the result is cached for 24 hours.
+That is the only request it makes — your log is still never uploaded.</p>
+<p>The <b>updates</b> button turns it off, and then the overlay is entirely offline.</p>
+</div></details>
+
+<details><summary>A new version broke something — how do I go back?</summary><div class="body">
+<p><b>versions</b> at the bottom of the panel lists recent releases; click one to install it. They
+are <i>pinned</i> builds with no update URL, so they will not silently update you forward again.</p>
+<p>Then please file an <b>issue</b> so it gets fixed — the button pre-fills the version you were on.</p>
+</div></details>
+
+<details><summary>What gets sent when I click "issue"?</summary><div class="body">
+<p>Nothing, until you press submit on GitHub. The button opens GitHub's own new-issue form with a
+prompt and a collapsed diagnostics block filled in — your version, browser, GPU, the loaded zone, and
+counts. <b>Never</b> your log, its file name, your coordinates or your session times. You can edit or
+delete any of it before submitting. See <a href="versions.html">Versions &amp; feedback</a>.</p>
 </div></details>
 
 <h2>Installing</h2>

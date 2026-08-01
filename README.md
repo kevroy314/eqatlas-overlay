@@ -71,6 +71,26 @@ Both panels **drag by their title bar**, and every setting — including where y
 saved to `localStorage` as you change it. Nothing from the log is ever stored; it stays in the tab
 you dropped it into.
 
+## Versions and feedback
+
+The bottom of the panel carries a version row: which build you are on, a link when a newer one
+exists, a **versions** list for rolling back, and **issue** / **idea** buttons that open a
+pre-filled GitHub issue.
+
+- The version check is **the only network request this tool makes** — one static JSON file from the
+  project's own Pages, cached for a day, carrying nothing about you. The `updates` button turns it
+  off and the overlay is entirely offline again.
+- Rollback targets are **pinned** builds with no `@updateURL`, so a downgrade sticks. Without that,
+  Tampermonkey would see the newer release at the other end and pull the user straight back to the
+  version they were escaping.
+- Issue reports include version, browser, GPU, loaded zone and counts. They include **no part of the
+  log** — not its contents, not its file name (which carries the character name), not coordinates,
+  not session times. Nothing is sent until the reader presses submit on GitHub, and the whole body is
+  visible and editable first.
+
+`tools/build.py` writes a pinned copy of each release into `docs/v/<version>/` and appends to
+`docs/versions.json`; `tools/backfill_pinned.py` generated the historical ones from git tags.
+
 **Hotkeys.** `H` hides and restores the Trail panels; `Shift`+`H` also hides the site's own header,
 footer and controls so the map fills the window for a screen capture. Neither is remembered across a
 reload, and while anything is hidden a small reminder of the key sits in the corner — it fades out so

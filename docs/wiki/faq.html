@@ -26,6 +26,7 @@
     <a href="session.html">Session stats</a>
     <a href="interface.html">Panels & hotkeys</a>
     <h5>Help</h5>
+    <a href="versions.html">Versions & feedback</a>
     <a href="faq.html" class="on">FAQ</a>
   </div>
 </nav>
@@ -136,6 +137,28 @@ raising as an issue.</p>
 <details><summary>Does it slow my browser down?</summary><div class="body">
 <p>Parsing is streamed in slices, so even a 121 MB log parses in about three seconds without
 freezing the tab. Drawing is a handful of objects added to a scene the Atlas is already rendering.</p>
+</div></details>
+
+<h2>Versions and feedback</h2>
+
+<details><summary>Does EQ Trail phone home?</summary><div class="body">
+<p>Once a day it fetches one static JSON file from the project's GitHub Pages to see whether a newer
+version exists. It sends no parameters and nothing about you, and the result is cached for 24 hours.
+That is the only request it makes — your log is still never uploaded.</p>
+<p>The <b>updates</b> button turns it off, and then the overlay is entirely offline.</p>
+</div></details>
+
+<details><summary>A new version broke something — how do I go back?</summary><div class="body">
+<p><b>versions</b> at the bottom of the panel lists recent releases; click one to install it. They
+are <i>pinned</i> builds with no update URL, so they will not silently update you forward again.</p>
+<p>Then please file an <b>issue</b> so it gets fixed — the button pre-fills the version you were on.</p>
+</div></details>
+
+<details><summary>What gets sent when I click "issue"?</summary><div class="body">
+<p>Nothing, until you press submit on GitHub. The button opens GitHub's own new-issue form with a
+prompt and a collapsed diagnostics block filled in — your version, browser, GPU, the loaded zone, and
+counts. <b>Never</b> your log, its file name, your coordinates or your session times. You can edit or
+delete any of it before submitting. See <a href="versions.html">Versions &amp; feedback</a>.</p>
 </div></details>
 
 <h2>Installing</h2>

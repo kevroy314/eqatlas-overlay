@@ -116,7 +116,9 @@
 
 <div class="note">
   <b>Your log never leaves your computer.</b> The file is read and drawn entirely in your own
-  browser. Nothing is uploaded, and this page has no server behind it — it just hands you a script.
+  browser, and this page has no server behind it — it just hands you a script. The overlay makes
+  exactly one request of its own: once a day it checks whether a newer version exists, sending
+  nothing with it. You can switch that off in the panel.
 </div>
 
 <h2>What your log needs</h2>
@@ -260,6 +262,16 @@ tells you how many were left out.</p>
 
 <a class="cta" href="wiki/index.html" style="background:linear-gradient(180deg,#2a2450,#1d1838);border-color:#443a68">Open the wiki
   <small>install · your log file · the trail · heatmap · gaps · deaths · session stats · FAQ</small></a>
+
+<h2>Updates, rolling back, and telling me it's broken</h2>
+
+<p>The bottom of the panel shows which version you're running, and turns into a link when a newer
+one exists. <b>versions</b> lets you drop back to an earlier release if one goes wrong — those are
+pinned builds, so they stay put instead of quietly updating you forward again.</p>
+
+<p><b>issue</b> and <b>idea</b> open a pre-filled GitHub issue with your version, browser and a few
+counts attached — never your log. Nothing is sent until you press submit, and you can edit it first.
+<a href="wiki/versions.html">More in the wiki →</a></p>
 
 <h2>Other ways to install</h2>
 
