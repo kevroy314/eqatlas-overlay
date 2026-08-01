@@ -1,6 +1,21 @@
+// ==UserScript==
+// PINNED BUILD of 0.3.0. No @updateURL, so it will not auto-update away.
+// Install the current release from the install page to rejoin the update channel.
+// @name         EQ Trail — /loc path + dwell heatmap for the EQL Zone Atlas
+// @namespace    https://github.com/kevroy314/eqatlas-overlay
+// @version      0.3.0
+// @description  Drop an EverQuest log onto the EQL Zone Atlas: your /loc track plays back as an animated 3D trail, with a dwell heatmap of where the time actually went.
+// @homepageURL  https://kevroy314.github.io/eqatlas-overlay/
+// @match        https://eqltools.com/atlas*
+// @match        https://eqltools.com/zones/*
+// @match        https://norrath3d.com/*
+// @run-at       document-idle
+// @grant        none
+// ==/UserScript==
+
 (function () {
   'use strict';
-  window.__EQTRAIL_BUILD = { version: '0.7.0', flavour: 'extension', pinned: false };
+  window.__EQTRAIL_BUILD = { version: '0.3.0', flavour: 'userscript', pinned: true };
   // app.js publishes window.__dbg at the very END of an ES module, so a userscript or content
   // script running at document-idle can beat it. Poll for it; give up loudly rather than silently.
   var tries = 0;
@@ -83,34 +98,7 @@
         // the single sample before you stopped moving — 'visits' is the truthful one there, and it
         // measures traffic, not dwell. Default 'time'; the toggle is in the panel.
         heatBy: 'time',
-
-        // ---- large gaps in the stream ----
-        // A /loc stream is not continuous. The macro stops, the player camps a spawn, or falls asleep —
-        // and a quarter of a real seven-hour session turns out to be gaps longer than a minute. Played
-        // back as-is that is a stationary dot for a quarter of the runtime, and on the heatmap it is one
-        // cell soaking up every colour in the ramp.
-        //
-        //   'real' — a gap is time like any other. Nothing is done.
-        //   'ff'   — the excess beyond the threshold is divided by gapFF.
-        //   'skip' — the excess beyond the threshold is discarded.
-        //
-        // 'skip' means something slightly different per layer, on purpose:
-        //   · animation — the gap is JUMPED (zero presentation time). There is nothing to watch.
-        //   · heatmap   — the interval is CAPPED at the threshold, not zeroed. Zeroing it would erase a
-        //     camp from the map entirely, and a camp is exactly the thing the heatmap exists to show.
-        // Same rule ("discard the excess"), different baseline, because the two layers are answering
-        // different questions about the same silence.
-        gapMode: 'skip',
-        gapThreshold: 60,       // seconds — above this, an interval counts as a gap
-        gapFF: 10,              // 'ff' divisor applied to the excess
-        gapApply: 'both',       // 'both' | 'anim' | 'heat' — which layers the policy touches
-
-        // ---- release channel ----
-        // The ONLY network request this tool makes. It fetches one static JSON file from the project's
-        // own GitHub Pages, sends nothing with it, and is cached for a day. Off means the overlay is
-        // once again entirely offline — which is how it shipped for its first six versions, and some
-        // people will want it back.
-        updateCheck: true,
+        maxGap: 30,             // seconds any one sample may claim (an AFK gap is not standing still)
         // Break the ribbon when consecutive samples are further apart than this. A real log is not a
         // continuous track: the macro stops, you camp, you log out, you come back three days later —
         // and every zone visit gets merged into one series. Without a break the tube draws a confident
@@ -120,7 +108,6 @@
         // Escape hatch for a client that really does print /loc north-first. Off by default because
         // every log measured so far prints east first; see the note above the parser.
         swapXY: false,
-        gravesOn: true,         // a headstone at each death, revealed as playback reaches it
         // ---- statistics ----
         // Which metrics are plotted. Two by default so the chart opens showing what it is FOR — a
         // single curve looks like a decoration, two that diverge look like a question.
@@ -178,14 +165,6 @@
         { k: 'coin',   label: 'Coin',          fmt: 'coin' },
         { k: 'loot',   label: 'Items looted',  fmt: 'int'  },
         { k: 'dist',   label: 'Distance',      fmt: 'dist' },
-        // RATIOS. These two are not sums, so they never belong on the cumulative axis — a percentage
-        // and a damage total share no scale. They are also not a reason to add a SECOND y-axis to the
-        // main chart: two scales side by side make every crossing point look like a relationship, and
-        // the crossing is an artifact of whatever ranges you happened to choose. Percentages already
-        // have a natural, self-describing 0–100% scale, so they get their own band underneath with a
-        // single axis they genuinely share.
-        { k: 'acc',    label: 'Accuracy',      fmt: 'ratio', ratio: ['hitOut', 'missOut'] },
-        { k: 'eva',    label: 'Evasion',       fmt: 'ratio', ratio: ['missIn', 'hitIn'] },
       ];
       // The dataviz reference's dark categorical slots, in its fixed order — validated against this
       // panel's surface (#15122e): lightness band, chroma floor, CVD separation, contrast all pass.
@@ -239,16 +218,9 @@
           const d = RE_DMG.exec(b);
           // "YOU" in caps is how EQ marks the player as the TARGET of a swing; anything else starting
           // with "You " is the player swinging. That single distinction splits the whole combat log.
-          if (d) {
-            const inbound = b.indexOf(' YOU for ') >= 0;
-            const k = inbound ? 'dmgIn' : (b.lastIndexOf('You ', 0) === 0 ? 'dmgOut' : null);
-            bump(ev, k, t, +d[1]);
-            if (k) bump(ev, inbound ? 'hitIn' : 'hitOut', t, 1);   // the swing itself, for the ratios
-          }
+          if (d) bump(ev, b.indexOf(' YOU for ') >= 0 ? 'dmgIn' : (b.lastIndexOf('You ', 0) === 0 ? 'dmgOut' : null), t, +d[1]);
           return;
         }
-        if (b.lastIndexOf('You try to ', 0) === 0) { bump(ev, 'missOut', t, 1); return; }
-        if (b.indexOf(' tries to ') >= 0 && b.indexOf(' YOU, but ') >= 0) { bump(ev, 'missIn', t, 1); return; }
         if (b.lastIndexOf('You have slain', 0) === 0) { bump(ev, 'kills', t, 1); return; }
         if (b.lastIndexOf('You have been slain', 0) === 0) { bump(ev, 'deaths', t, 1); return; }
         if (b.indexOf('experience') >= 0) {
@@ -520,19 +492,18 @@
         tubes: [],          // one per unbroken run of samples; all share O.pathMat
         tube: null, pathMat: null, heat: null, head: null, beam: null,
         t0: 0, t1: 1, u: 1, playing: false, _raf: 0, _last: 0,
-        ev: {}, stats: null, graves: [], pos: {}, hidden: { ours: false, site: false }, statsOpen: true,
+        ev: {}, stats: null, pos: {}, hidden: { ours: false, site: false }, statsOpen: true,
       };
 
       function detach() {
-        for (const o of [...O.tubes, ...(O.graves || []), O.heat, O.head, O.beam]) {
+        for (const o of [...O.tubes, O.heat, O.head, O.beam]) {
           if (o && o.parent) o.parent.remove(o);
           if (o && o.geometry) o.geometry.dispose();
         }
-        for (const g of O.graves || []) if (g.material) g.material.dispose();
         // The tubes SHARE one material — dispose it once, not once per run.
         if (O.pathMat) O.pathMat.dispose();
         for (const o of [O.heat, O.head, O.beam]) if (o && o.material) o.material.dispose();
-        O.tubes = []; O.graves = []; O.runs = 0; O.lone = 0; O.gravesSkipped = 0;
+        O.tubes = []; O.runs = 0; O.lone = 0;
         O.tube = O.pathMat = O.heat = O.head = O.beam = null;
       }
 
@@ -641,15 +612,12 @@
         const S = O.raw.map(r => ({ t: r.t, p: locToMesh(r.east, r.north, r.up) }));
         O.t0 = S[0].t; O.t1 = S[S.length - 1].t;
         const span = Math.max(1e-6, O.t1 - O.t0);
-        // Dwell credit per sample. Each INTERVAL between samples is passed through the gap policy
-        // first, then split half to the sample on either side — so a long silence is discounted once,
-        // at the interval that actually contains it, rather than twice at both of its endpoints.
-        const eff = [];
-        for (let i = 0; i < S.length - 1; i++) eff.push(heatGap(S[i + 1].t - S[i].t));
+        // A gap in /loc spam is not 40 minutes of standing still — it's the macro stopping. Clamp the
+        // dwell any one sample can claim, or one AFK gap eats the whole colour range.
         const dts = [];
         for (let i = 0; i < S.length; i++) {
-          const a = i > 0 ? eff[i - 1] : 0, b = i < eff.length ? eff[i] : 0;
-          dts.push((a + b) / 2 || 1);
+          const a = i > 0 ? S[i].t - S[i - 1].t : 0, b = i < S.length - 1 ? S[i + 1].t - S[i].t : 0;
+          dts.push(Math.min((a + b) / 2 || 1, 30));
         }
         let maxSpd = 1e-6;
         for (let i = 1; i < S.length; i++) {
@@ -709,13 +677,6 @@
 
         // ---- 2. the dwell heatmap ----
         if (o.heatOn) buildHeat(Z, S, dts, scaleR); else O.heatStats = null;
-        buildGraves(Z, scaleR);
-        // Remember where we are in LOG time, rebuild the map, then land on the same moment again.
-        // Without this, changing the gap mode keeps the same presentation fraction and therefore jumps
-        // the playhead to a different point in the session — which reads as the setting breaking things.
-        const wasAt = (O.tmap && O.raw.length) ? logAtPres(O.u * O.presSpan) : null;
-        buildTimeMap();
-        if (wasAt != null && O.tmap) O.u = Math.min(1, Math.max(0, presAtLog(wasAt) / O.presSpan));
 
         applyU();
         stat();
@@ -802,39 +763,16 @@
       }
 
       // ============================ playback ================================
-      // Index of the last /loc sample at or before t (binary search — the scrubber can jump).
-      function sampleIndexAt(t) {
-        let lo = 0, hi = O.raw.length - 1;
-        while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (O.raw[mid].t <= t) lo = mid; else hi = mid - 1; }
-        return lo;
-      }
-
-      // Where were you at time t? Interpolates between the surrounding samples when they are close
-      // together. When they are NOT — the macro stopped, or you died and stood still — interpolating
-      // across the gap would invent a position halfway to wherever you went next, so we stay put on the
-      // last known sample instead. `null` when the nearest sample is further off than gapBreak: better
-      // to place no marker than a confident one in the wrong place.
-      function posAt(t, tolerate) {
-        if (!O.raw.length) return null;
-        const i = sampleIndexAt(t);
-        const a = O.raw[i], b = O.raw[Math.min(O.raw.length - 1, i + 1)];
-        if (tolerate != null && Math.abs(t - a.t) > tolerate && Math.abs(b.t - t) > tolerate) return null;
-        const gap = b.t - a.t;
-        const k = (gap > 0 && gap <= 30) ? (t - a.t) / gap : 0;
-        return locToMesh(a.east + (b.east - a.east) * k,
-                         a.north + (b.north - a.north) * k,
-                         a.up + (b.up - a.up) * k);
-      }
-
       function applyU() {
-        if (!O.raw.length) { if (O.pathMat) O.pathMat.uniforms.uHead.value = O.u; return; }
-        // O.u is a position on the PRESENTATION clock. Everything else — the shader, the graves, the
-        // stats — speaks log time, so convert once here and let them stay honest.
-        const tNow = O.tmap ? logAtPres(O.u * O.presSpan) : O.t0 + (O.t1 - O.t0) * O.u;
-        if (O.pathMat) O.pathMat.uniforms.uHead.value = (tNow - O.t0) / Math.max(1e-6, O.t1 - O.t0);
-        const a = O.raw[sampleIndexAt(tNow)];
-        const p = posAt(tNow);
-        updateGraves(tNow);
+        if (O.pathMat) O.pathMat.uniforms.uHead.value = O.u;
+        if (!O.raw.length) return;
+        const tNow = O.t0 + (O.t1 - O.t0) * O.u;
+        // walk to the sample at/just before tNow (binary search — the scrubber can jump)
+        let lo = 0, hi = O.raw.length - 1;
+        while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (O.raw[mid].t <= tNow) lo = mid; else hi = mid - 1; }
+        const a = O.raw[lo], b = O.raw[Math.min(O.raw.length - 1, lo + 1)];
+        const k = b.t > a.t ? (tNow - a.t) / (b.t - a.t) : 0;
+        const p = locToMesh(a.east + (b.east - a.east) * k, a.north + (b.north - a.north) * k, a.up + (b.up - a.up) * k);
         if (O.head) { O.head.position.copy(p); O.head.position.y += O.opts.yLift; O.head.visible = O.opts.pathOn; }
         if (O.beam && D.Z) {
           const bb = D.Z.atlas.bounds, pa = O.beam.geometry.attributes.position;
@@ -844,9 +782,7 @@
         const hud = document.getElementById('eqtrail-hud');
         if (hud) {
           const d = new Date(tNow * 1000);
-          const g = gapAt(tNow);
-          hud.textContent = `${d.toISOString().slice(11, 19)}  ·  ${a.north.toFixed(0)}, ${a.east.toFixed(0)}, ${a.up.toFixed(0)}`
-            + (g ? `   ${O.opts.gapMode === 'ff' ? '\u23e9' : '\u23ed'} ${fmtDur(g)} gap` : '');
+          hud.textContent = `${d.toISOString().slice(11, 19)}  ·  ${a.north.toFixed(0)}, ${a.east.toFixed(0)}, ${a.up.toFixed(0)}`;
         }
         const sc = document.getElementById('eqtrail-scrub');
         if (sc && document.activeElement !== sc) sc.value = String(Math.round(O.u * 1000));
@@ -861,9 +797,7 @@
         const tick = (now) => {
           if (!O.playing) return;
           const dt = (now - O._last) / 1000; O._last = now;
-          // Advance on the presentation clock: with gaps skipped this span is shorter than the session,
-          // so the same `speed` setting spends its time on the parts worth watching.
-          const span = O.tmap ? O.presSpan : Math.max(1, O.t1 - O.t0);
+          const span = Math.max(1, O.t1 - O.t0);
           O.u += (O.opts.speed * dt) / span;
           if (O.u >= 1) { O.u = 0; }            // loop
           applyU();
@@ -872,293 +806,6 @@
         O._raf = requestAnimationFrame(tick);
       };
       function syncBtn() { const b = document.getElementById('eqtrail-play'); if (b) b.textContent = O.playing ? '⏸' : '▶'; }
-
-      // ======================== gap policy / time warp ======================
-      // Playback runs on a PRESENTATION clock, not the log clock. The two are related by a piecewise
-      // linear map built once per rebuild: ordinary intervals map 1:1, gaps map through the policy. So
-      // "skip" is not a special case sprinkled through the animation loop — it is just a segment of the
-      // map with zero length, and everything downstream keeps working in honest log time.
-      const gapAffects = layer => O.opts.gapApply === 'both' || O.opts.gapApply === layer;
-
-      // Presentation duration of one interval between samples.
-      function animGap(dt) {
-        const o = O.opts;
-        if (!gapAffects('anim') || dt <= o.gapThreshold || o.gapMode === 'real') return dt;
-        if (o.gapMode === 'ff') return o.gapThreshold + (dt - o.gapThreshold) / Math.max(1, o.gapFF);
-        return 0;                                   // skip — jump it, there is nothing to watch
-      }
-      // Dwell credit for one interval between samples.
-      function heatGap(dt) {
-        const o = O.opts;
-        if (!gapAffects('heat') || dt <= o.gapThreshold || o.gapMode === 'real') return dt;
-        if (o.gapMode === 'ff') return o.gapThreshold + (dt - o.gapThreshold) / Math.max(1, o.gapFF);
-        return o.gapThreshold;                      // skip — cap it, do not erase the camp
-      }
-
-      // Build the map. `log[i]` is the sample's real timestamp, `pres[i]` where it lands on the
-      // presentation clock. Both are monotonic, so either direction is a binary search plus a lerp.
-      function buildTimeMap() {
-        O.tmap = null; O.gapStats = null;
-        if (!O.raw || O.raw.length < 2) return;
-        const log = [O.raw[0].t], pres = [0];
-        let skipped = 0, gaps = 0;
-        for (let i = 1; i < O.raw.length; i++) {
-          const dt = O.raw[i].t - O.raw[i - 1].t;
-          const shown = animGap(dt);
-          if (dt > O.opts.gapThreshold) { gaps++; skipped += dt - shown; }
-          log.push(O.raw[i].t);
-          pres.push(pres[pres.length - 1] + shown);
-        }
-        O.tmap = { log, pres };
-        O.presSpan = Math.max(1e-6, pres[pres.length - 1]);
-        O.gapStats = { gaps, skipped, logSpan: Math.max(1e-6, O.raw[O.raw.length - 1].t - O.raw[0].t) };
-      }
-
-      function lerpMap(from, to, v) {
-        if (!O.tmap) return v;
-        const a = O.tmap[from], b = O.tmap[to];
-        if (v <= a[0]) return b[0];
-        if (v >= a[a.length - 1]) return b[b.length - 1];
-        let lo = 0, hi = a.length - 1;
-        while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (a[mid] <= v) lo = mid; else hi = mid - 1; }
-        const hiI = Math.min(a.length - 1, lo + 1);
-        const d = a[hiI] - a[lo];
-        // A zero-length segment is a skipped gap: land on its far end rather than dividing by zero.
-        return d > 0 ? b[lo] + (b[hiI] - b[lo]) * ((v - a[lo]) / d) : b[hiI];
-      }
-      const logAtPres = p => lerpMap('pres', 'log', p);
-      const presAtLog = t => lerpMap('log', 'pres', t);
-
-      // Is the playhead inside a compressed gap right now? Used to tell the reader what just happened,
-      // so a sudden jump reads as a deliberate skip rather than as a glitch.
-      function gapAt(t) {
-        if (!O.tmap || O.opts.gapMode === 'real' || !gapAffects('anim')) return null;
-        const L = O.tmap.log;
-        let lo = 0, hi = L.length - 1;
-        while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (L[mid] <= t) lo = mid; else hi = mid - 1; }
-        const hiI = Math.min(L.length - 1, lo + 1);
-        const dt = L[hiI] - L[lo];
-        return dt > O.opts.gapThreshold ? dt : null;
-      }
-
-      // ======================= version & issue reporting ====================
-      // Development here is hands-off: a friend runs it, something looks wrong, and there is no
-      // practical path from "that's odd" to a filed issue. These three things close that loop without
-      // a backend of any kind — GitHub Pages serves a static manifest with `access-control-allow-origin: *`,
-      // and GitHub's own new-issue form accepts a prefilled title and body over the URL.
-      const BUILD = window.__EQTRAIL_BUILD || { version: 'dev', flavour: 'console', pinned: false };
-      const REPO = 'https://github.com/kevroy314/eqatlas-overlay';
-      const PAGES = 'https://kevroy314.github.io/eqatlas-overlay';
-      const VCHECK_KEY = 'eqtrail.vcheck.v1';
-      const DAY = 86400000;
-
-      const vparts = v => String(v || '0').split('.').map(n => parseInt(n, 10) || 0);
-      function newerThan(a, b) {                       // is a > b?
-        const A = vparts(a), B = vparts(b);
-        for (let i = 0; i < 3; i++) {
-          if ((A[i] || 0) > (B[i] || 0)) return true;
-          if ((A[i] || 0) < (B[i] || 0)) return false;
-        }
-        return false;
-      }
-
-      // Cached for a day so a browsing session costs at most one request, and failure is silent:
-      // offline, a page CSP, a rate limit or a typo in the manifest must never break the overlay.
-      async function checkVersion(force) {
-        if (!O.opts.updateCheck) { O.release = null; syncAbout(); return; }
-        let c = {};
-        try { c = JSON.parse(localStorage.getItem(VCHECK_KEY) || '{}'); } catch (e) {}
-        if (!force && c.at && Date.now() - c.at < DAY && c.data) { O.release = c.data; syncAbout(); return; }
-        try {
-          const r = await fetch(PAGES + '/versions.json', { cache: 'no-cache' });
-          if (!r.ok) throw new Error(r.status);
-          const d = await r.json();
-          try { localStorage.setItem(VCHECK_KEY, JSON.stringify({ at: Date.now(), data: d })); } catch (e) {}
-          O.release = d;
-        } catch (e) {
-          console.log('[EQTrail] version check skipped:', e.message);
-          O.release = c.data || null;                  // fall back to whatever we last saw
-        }
-        syncAbout();
-      }
-      O.checkVersion = checkVersion;
-
-      // What goes in a bug report. Deliberately NOTHING from the log itself — no file name (which
-      // carries the character name), no coordinates, no timestamps. Counts and settings only. The
-      // reader still sees the whole body in GitHub's form before submitting, which is the real consent
-      // gate; this just makes sure there is nothing there they would want to remove.
-      function gpuInfo() {
-        try {
-          const c = document.createElement('canvas');
-          const gl = c.getContext('webgl2') || c.getContext('webgl');
-          if (!gl) return 'no webgl';
-          const dbg = gl.getExtension('WEBGL_debug_renderer_info');
-          const name = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
-          const lose = gl.getExtension('WEBGL_lose_context');
-          if (lose) lose.loseContext();                // GL contexts are a limited resource — give it back
-          return String(name).slice(0, 90);
-        } catch (e) { return '?'; }
-      }
-
-      function diagnostics() {
-        const Z = D.Z, h = O.heatStats, g = O.gapStats;
-        const o = O.opts;
-        const lines = [
-          '', '', '---', '<details><summary>Diagnostics</summary>', '', '```',
-          `EQ Trail   ${BUILD.version}${BUILD.pinned ? ' (pinned)' : ''} · ${BUILD.flavour}`,
-          `page       ${location.host}${location.pathname}`,
-          `zone       ${Z ? Z.key : '(none loaded)'}   three r${T.REVISION}`,
-          `browser    ${navigator.userAgent}`,
-          `gpu        ${gpuInfo()}`,
-        ];
-        if (O.raw && O.raw.length) {
-          lines.push(
-            `log        ${O.raw.length} locs here, ${O.totalPts || O.raw.length} total, ` +
-            `${O.segments ? O.segments.length : 1} zones`,
-            `drawn      ${O.runs || 0} runs, ${O.graves ? O.graves.length : 0} graves` +
-            (h ? `, ${h.cells} cells` : ''),
-            `gaps       ${g ? g.gaps : 0} over ${o.gapThreshold}s` +
-            (g && g.skipped ? `, ${Math.round(g.skipped)}s removed` : ''));
-        } else {
-          lines.push('log        (none loaded)');
-        }
-        lines.push(`settings   ${JSON.stringify(o)}`, '```', '', '</details>');
-        return lines.join('\n');
-      }
-
-      // GitHub caps how much it will take on the URL; a runaway user-agent or settings blob must not
-      // silently produce a dead link. Trim the diagnostics rather than the person's own words.
-      function issueUrl(kind) {
-        const bug = kind === 'bug';
-        const title = bug ? '' : '';
-        const intro = bug
-          ? ['**What happened?**', '', '', '**What did you expect?**', '', '',
-             '**Which log / zone?** (please do not paste log contents — a description is enough)', '', '']
-          : ['**What would you like it to do?**', '', '', '**Why — what are you trying to find out?**', '', ''];
-        let body = intro.join('\n') + diagnostics();
-        const base = `${REPO}/issues/new?labels=${bug ? 'bug' : 'enhancement'}` +
-                     `&title=${encodeURIComponent(title)}&body=`;
-        while (encodeURIComponent(body).length + base.length > 6000 && body.length > 400) {
-          body = body.slice(0, body.length - 200);
-        }
-        return base + encodeURIComponent(body);
-      }
-      O.issueUrl = issueUrl;
-
-      // The about row. Three states: up to date, an update waiting, or the check turned off.
-      function syncAbout() {
-        const v = document.getElementById('eqtrail-ver');
-        if (!v) return;
-        const rel = O.release, cur = BUILD.version;
-        const bits = [`v${cur}`];
-        if (BUILD.pinned) bits.push('pinned');
-        if (!O.opts.updateCheck) bits.push('checks off');
-        else if (rel && newerThan(rel.latest, cur)) {
-          v.innerHTML = `v${cur}${BUILD.pinned ? ' pinned' : ''} · ` +
-            `<a href="${PAGES}/${rel.install}" target="_blank" rel="noopener">update to ${rel.latest} \u2192</a>`;
-          return;
-        } else if (rel) bits.push('up to date');
-        v.textContent = bits.join(' \u00b7 ');
-      }
-      O._syncAbout = syncAbout;
-
-      // Rolling back is the point here: a bad release should be one click to escape, not a git
-      // expedition. Each entry is a PINNED build with no @updateURL, so it stays put once installed.
-      function renderVersions() {
-        const box = document.getElementById('eqtrail-verlist');
-        if (!box) return;
-        const rel = O.release;
-        if (!rel || !rel.versions || !rel.versions.length) {
-          box.innerHTML = `<div class="hint">No version list yet — it is fetched once a day from the
-            project page.${O.opts.updateCheck ? '' : ' Update checks are currently <b>off</b>.'}
-            <a href="${REPO}/releases" target="_blank" rel="noopener">All releases \u2192</a></div>`;
-          return;
-        }
-        const rows = rel.versions.slice(0, 8).map(e => {
-          const cur = e.v === BUILD.version;
-          return `<a href="${PAGES}/${e.pinned}" target="_blank" rel="noopener"${cur ? ' class="cur"' : ''}>` +
-                 `<span>v${e.v}${cur ? ' \u2190 installed' : ''}</span><i>${e.date}</i></a>`;
-        }).join('');
-        box.innerHTML = rows +
-          `<div class="hint"><b>Pinned</b> — these do not auto-update, so a rollback sticks. Older ones
-           have no version row: return via <a href="${PAGES}/${rel.install}" target="_blank"
-           rel="noopener">the install page</a> · <a href="${REPO}/releases" target="_blank"
-           rel="noopener">notes</a></div>`;
-      }
-
-      // ============================ gravestones =============================
-      // One marker per death, placed where the /loc track says you were standing, revealed in step with
-      // playback so a death shows up as the trail reaches it.
-      //
-      // Drawn as a Sprite from a canvas texture rather than as geometry: a sprite always faces the
-      // camera, so the icon stays legible from any orbit angle, and SpriteMaterial is one of three's own
-      // materials — which means it already carries the logarithmic-depth chunks this renderer requires.
-      // A hand-written shader here would silently vanish behind the terrain, the same trap the trail hit.
-      let graveTex = null;
-      function graveTexture() {
-        if (graveTex) return graveTex;
-        const S = 64, c = document.createElement('canvas');
-        c.width = c.height = S;
-        const g = c.getContext('2d');
-        // A rounded-top headstone with a cross, drawn once. Pale stone with a dark outline so it reads
-        // against both grass and the near-black sky, plus a soft shadow so it does not look pasted on.
-        g.clearRect(0, 0, S, S);
-        g.translate(S / 2, S / 2);
-        const w = 22, h = 26, r = 11;
-        g.beginPath();
-        g.moveTo(-w / 2, h / 2);
-        g.lineTo(-w / 2, -h / 2 + r);
-        g.arc(0, -h / 2 + r, r, Math.PI, 0);
-        g.lineTo(w / 2, h / 2);
-        g.closePath();
-        g.fillStyle = 'rgba(0,0,0,0.55)';
-        g.save(); g.translate(1.5, 2); g.fill(); g.restore();   // shadow
-        g.fillStyle = '#d8d4e4'; g.fill();
-        g.lineWidth = 2.5; g.strokeStyle = '#2a2438'; g.stroke();
-        g.strokeStyle = '#4a4360'; g.lineWidth = 3;              // the cross
-        g.beginPath();
-        g.moveTo(0, -13); g.lineTo(0, 4);
-        g.moveTo(-6, -6); g.lineTo(6, -6);
-        g.stroke();
-        graveTex = new T.CanvasTexture(c);
-        graveTex.colorSpace = T.SRGBColorSpace;                  // canvas pixels are sRGB, not linear
-        return graveTex;
-      }
-
-      function buildGraves(Z, scaleR) {
-        O.graves = [];
-        const ev = O.ev && O.ev.deaths;
-        if (!ev || !ev.t.length || !O.opts.gravesOn) return;
-        const t0 = O.raw[0].t, t1 = O.raw[O.raw.length - 1].t;
-        let skipped = 0;
-        for (let i = 0; i < ev.t.length; i++) {
-          const t = ev.t[i];
-          if (t < t0 || t > t1) continue;                        // a death in another zone's visit
-          const p = posAt(t, O.opts.gapBreak);
-          if (!p) { skipped++; continue; }                       // no nearby /loc — placement unknowable
-          const mat = new T.SpriteMaterial({
-            map: graveTexture(), transparent: true, depthWrite: false,
-            clippingPlanes: bandClip(Z, p.y), sizeAttenuation: true, toneMapped: false,
-          });
-          const sp = new T.Sprite(mat);
-          const r = Math.max(1.6, Z.span * 0.011);               // one apparent size across zone scales
-          sp.scale.set(r, r, 1);
-          sp.position.set(p.x, p.y + r * 0.55 + O.opts.yLift * scaleR, p.z);   // stand it ON the ground
-          sp.renderOrder = 997;
-          sp.visible = false;
-          sp.userData.t = t;
-          bandGroupForY(Z, p.y).add(sp);
-          O.graves.push(sp);
-        }
-        O.gravesSkipped = skipped;
-      }
-
-      // Reveal each stone as the playhead passes its moment. Cheap enough to just re-assert every frame.
-      function updateGraves(tNow) {
-        if (!O.graves) return;
-        const on = O.opts.gravesOn;
-        for (const sp of O.graves) sp.visible = on && sp.userData.t <= tNow;
-      }
 
       // ======================= stats: scope + curves ========================
       // The cards and the chart show the SAME window the map is showing: the active zone segment's
@@ -1172,10 +819,8 @@
         if (!O.raw || !O.raw.length) return;
         const t0 = O.raw[0].t, t1 = O.raw[O.raw.length - 1].t;
         const S = {};
-        // The raw counters behind the ratios are built like any other series, then divided.
-        for (const m of METRICS.map(x => x.k).concat(['hitOut', 'missOut', 'hitIn', 'missIn'])
-                               .filter(k => k !== 'dist' && k !== 'acc' && k !== 'eva')
-                               .map(k => ({ k }))) {
+        for (const m of METRICS) {
+          if (m.k === 'dist') continue;
           const a = O.ev && O.ev[m.k];
           if (!a || !a.t.length) continue;
           const ts = [], cum = [];
@@ -1216,21 +861,7 @@
         return series.cum[lo];
       }
 
-      // A ratio is "of everything so far", to match every other number on the panel being a running
-      // total. It settles as the session goes on rather than twitching per fight — which is the honest
-      // reading of "how often did I connect", and the only one that is stable with sparse data.
-      function ratioAt(m, t) {
-        const S = O.stats && O.stats.S;
-        if (!S) return null;
-        const a = S[m.ratio[0]], b = S[m.ratio[1]];
-        if (!a && !b) return null;
-        const x = a ? valueAt(a, t) : 0, y = b ? valueAt(b, t) : 0;
-        return (x + y) > 0 ? x / (x + y) : null;
-      }
-      const hasRatio = m => !!(m.ratio && O.stats && (O.stats.S[m.ratio[0]] || O.stats.S[m.ratio[1]]));
-
       function fmtVal(kind, v) {
-        if (kind === 'ratio') return v == null ? '—' : Math.round(v * 100) + '%';
         if (kind === 'coin') {                       // copper is the storage unit; platinum is the read
           if (v >= 1000) return (v / 1000).toFixed(v >= 10000 ? 0 : 1) + 'p';
           if (v >= 100) return (v / 100).toFixed(1) + 'g';
@@ -1258,9 +889,7 @@
       function drawChart(tNow) {
         const svg = document.getElementById('eqtrail-chart');
         if (!svg || !O.stats) return;
-        const M = k => METRICS.find(m => m.k === k);
-        const picked = O.opts.series.filter(k => !M(k).ratio && O.stats.S[k]);
-        drawBand(tNow);
+        const picked = O.opts.series.filter(k => O.stats.S[k]);
         const { t0, t1 } = O.stats, span = Math.max(1, t1 - t0);
         const X = t => CHART.padL + (CHART.w - CHART.padL - CHART.padR) * ((t - t0) / span);
         const innerH = CHART.h - CHART.padT - CHART.padB;
@@ -1313,45 +942,6 @@
         svg.innerHTML = parts.join('');
       }
       const fmtClock = t => new Date(t * 1000).toISOString().slice(11, 16);
-
-      // The ratio band: its own strip, its own single 0–100% axis, shared by every ratio because they
-      // genuinely share those units. Hidden entirely when no ratio is selected, so it costs nothing.
-      const BAND = { w: CHART.w, h: 58, padL: 6, padR: 6, padT: 8, padB: 13 };
-      function drawBand(tNow) {
-        const svg = document.getElementById('eqtrail-band');
-        if (!svg || !O.stats) return;
-        const picked = O.opts.series.map(k => METRICS.find(m => m.k === k)).filter(m => m.ratio && hasRatio(m));
-        svg.style.display = picked.length ? '' : 'none';
-        if (!picked.length) return;
-        const { t0, t1 } = O.stats, span = Math.max(1, t1 - t0);
-        const X = t => BAND.padL + (BAND.w - BAND.padL - BAND.padR) * ((t - t0) / span);
-        const innerH = BAND.h - BAND.padT - BAND.padB;
-        const Y = r => BAND.padT + innerH * (1 - r);
-        const parts = [];
-        for (const g of [0, 0.5, 1]) {
-          parts.push(`<line x1="${BAND.padL}" y1="${Y(g)}" x2="${BAND.w - BAND.padR}" y2="${Y(g)}" stroke="#2c2545" stroke-width="1"/>`);
-        }
-        parts.push(`<text x="${BAND.padL + 2}" y="${Y(1) + 7}" fill="#6d6590" font-size="8">100%</text>`);
-        for (const m of picked) {
-          const col = seriesColor(m.k);
-          const N = 120;
-          let d = '', f = '';
-          for (let i = 0; i <= N; i++) {
-            const t = t0 + span * (i / N), r = ratioAt(m, t);
-            if (r == null) continue;                       // no swings yet — draw nothing, don't imply 0%
-            const seg = (t <= tNow ? d : f);
-            const cmd = (seg ? 'L' : 'M') + X(t).toFixed(1) + ' ' + Y(r).toFixed(1);
-            if (t <= tNow) d += cmd; else f += cmd;
-          }
-          if (f) parts.push(`<path d="${f}" fill="none" stroke="${col}" stroke-width="1.5" opacity="0.18"/>`);
-          if (d) parts.push(`<path d="${d}" fill="none" stroke="${col}" stroke-width="2" stroke-linejoin="round"/>`);
-        }
-        const px = X(Math.min(t1, Math.max(t0, tNow)));
-        parts.push(`<line x1="${px}" y1="${BAND.padT - 3}" x2="${px}" y2="${BAND.h - BAND.padB}" stroke="#9fe8ff" stroke-width="1" opacity="0.8"/>`);
-        parts.push(`<text x="${BAND.w / 2}" y="${BAND.h - 3}" fill="#6d6590" font-size="9" text-anchor="middle">${
-          picked.map(m => m.label).join(' · ')} — share of swings so far</text>`);
-        svg.innerHTML = parts.join('');
-      }
 
       // ======================= settings persistence =========================
       // Every knob is saved as you move it, so the panel comes back the way it was left. Only the
@@ -1525,27 +1115,6 @@
         color:#8d85ab;font-size:11px;cursor:pointer}
       #eqtrail-drop.hot{border-color:#7c6fe0;color:#cfc7ea;background:#221c3a}
       #eqtrail-stat{margin-top:7px;font:10px ui-monospace,monospace;color:#7d7495}
-      .eqt-about{margin-top:9px;padding-top:8px;border-top:1px solid #2c2545;
-        font-size:10px;color:#6d6590}
-      .eqt-aboutbtns{display:flex;align-items:center;gap:6px}
-      /* Its own line. Sharing a flex row with the buttons ellipsed "update to 0.8.0" down to "u…",
-         which hid the single most useful thing the row can ever say. */
-      .eqt-about #eqtrail-ver{font-family:ui-monospace,monospace;margin-bottom:5px;line-height:1.4}
-      .eqt-about #eqtrail-ver a{color:#8ee6a0;text-decoration:none;font-weight:600}
-      .eqt-about #eqtrail-ver a:hover{text-decoration:underline}
-      .eqt-about button{font-size:10px;padding:2px 7px}
-      #eqtrail-verlist{margin-top:7px;border:1px solid #2c2545;border-radius:7px;overflow:hidden}
-      #eqtrail-verlist a{display:flex;justify-content:space-between;gap:8px;padding:5px 9px;
-        font:11px ui-monospace,monospace;color:#cfc7ea;text-decoration:none;border-bottom:1px solid #221c3a}
-      #eqtrail-verlist a:last-child{border-bottom:0}
-      #eqtrail-verlist a:hover{background:#241d40}
-      #eqtrail-verlist a i{color:#6d6590;font-style:normal}
-      #eqtrail-verlist a.cur{color:#9fe8ff}
-      /* Explicit: this block inherits white-space:nowrap from the panel, which clipped the sentence
-         rather than wrapping it (scrollWidth 311 into a 236px box). */
-      #eqtrail-verlist .hint{padding:6px 9px;font-size:10px;color:#6d6590;line-height:1.45;
-        background:#171233;white-space:normal}
-      #eqtrail-verlist .hint a{color:#9fe8ff}
       .eqt-keyhint{margin-top:7px;font-size:10px;color:#6d6590;line-height:1.4}
       .eqt-keyhint b{color:#9fe8ff;font-family:ui-monospace,monospace;font-weight:600}`;
 
@@ -1635,22 +1204,8 @@
           ${slider('opacity', 'heatOpacity', 0, 1, 0.02, v => Math.round(v * 100) + '%')}
           <div class="eqt-row"><label>weight</label>
             <button data-w="time" class="on">time</button><button data-w="visits">visits</button></div>
-          <hr style="border:0;border-top:1px solid #2c2545;margin:11px 0 8px">
-          <div class="eqt-row"><label>gaps</label>
-            <button data-g="skip" class="on">skip</button><button data-g="ff">fast fwd</button>
-            <button data-g="real">real</button></div>
-          ${slider('over', 'gapThreshold', 10, 900, 10, v => fmtDur(v))}
-          <div class="eqt-row" id="eqtrail-ffrow" style="display:none">
-            <label>speed-up</label>
-            <input type="range" data-k="gapFF" min="2" max="60" step="1" value="${O.opts.gapFF}">
-            <span class="v" data-v="gapFF">${O.opts.gapFF}\u00d7</span></div>
-          <div class="eqt-row"><label>applies to</label>
-            <button data-a="both" class="on">both</button><button data-a="anim">path</button>
-            <button data-a="heat">heat</button></div>
-          <div id="eqtrail-gapinfo" class="eqt-cap"></div>
           <div class="eqt-row"><label>layers</label>
-            <button data-t="pathOn" class="on">path</button><button data-t="heatOn" class="on">heat</button>
-            <button data-t="gravesOn" class="on">deaths</button></div>
+            <button data-t="pathOn" class="on">path</button><button data-t="heatOn" class="on">heat</button></div>
           <div class="eqt-scale"><div class="eqt-bar" style="background:${heatBarCss()}"></div>
             <div class="eqt-ticks" id="eqtrail-ticks"></div>
             <div class="eqt-cap" id="eqtrail-cap"></div></div>
@@ -1662,17 +1217,7 @@
             <button id="eqtrail-hideall">all UI</button></div>
           <div class="eqt-keyhint">hidden? press <b>H</b> for the panels, <b>Shift</b>+<b>H</b> for everything</div>
           <div id="eqtrail-drop">drop an eqlog_*.txt here</div>
-          <div id="eqtrail-stat"></div>
-          <div class="eqt-about">
-            <div id="eqtrail-ver"></div>
-            <div class="eqt-aboutbtns">
-            <button id="eqtrail-bug" title="Opens a pre-filled GitHub issue. Includes your version, browser and counts — never your log.">issue</button>
-            <button id="eqtrail-idea" title="Suggest a feature — same, pre-filled on GitHub.">idea</button>
-            <button id="eqtrail-vers" title="Install a different version">versions</button>
-            <button data-o="updateCheck" title="Check the project page once a day for a newer version. Sends nothing — it is a plain fetch of one static file.">updates</button>
-            </div>
-          </div>
-          <div id="eqtrail-verlist" hidden></div></div>`;
+          <div id="eqtrail-stat"></div></div>`;
         document.body.appendChild(el);
 
         el.querySelector('#eqtrail-x').onclick = () => O.clear();
@@ -1682,11 +1227,12 @@
           r.oninput = e => {
             const k = e.target.dataset.k, v = +e.target.value;
             O.opts[k] = v;
-            el.querySelector(`[data-v="${k}"]`).textContent = fmtOpt(k, v);
+            el.querySelector(`[data-v="${k}"]`).textContent =
+              k === 'speed' ? v + '×' : k === 'cell' ? v : k === 'relief' ? (v == 0 ? 'flat' : v) : Math.round(v * 100) + '%';
             if (k === 'trail' && O.pathMat) O.pathMat.uniforms.uTrail.value = v;
             else if (k === 'future' && O.pathMat) O.pathMat.uniforms.uFuture.value = v;
             else if (k === 'heatOpacity' && O.heat) O.heat.material.opacity = v;
-            else if (k === 'cell' || k === 'relief' || k === 'gapThreshold' || k === 'gapFF') { O.rebuild(); stat(); }
+            else if (k === 'cell' || k === 'relief') { O.rebuild(); stat(); }
             saveSettings();
           };
         });
@@ -1700,17 +1246,6 @@
           const k = b.dataset.t; O.opts[k] = !O.opts[k];
           b.classList.toggle('on', O.opts[k]); O.rebuild(); saveSettings();
         });
-        el.querySelectorAll('button[data-g]').forEach(b => b.onclick = () => {
-          O.opts.gapMode = b.dataset.g;
-          el.querySelectorAll('button[data-g]').forEach(x => x.classList.toggle('on', x === b));
-          el.querySelector('#eqtrail-ffrow').style.display = O.opts.gapMode === 'ff' ? 'flex' : 'none';
-          O.rebuild(); saveSettings();
-        });
-        el.querySelectorAll('button[data-a]').forEach(b => b.onclick = () => {
-          O.opts.gapApply = b.dataset.a;
-          el.querySelectorAll('button[data-a]').forEach(x => x.classList.toggle('on', x === b));
-          O.rebuild(); saveSettings();
-        });
         el.querySelectorAll('button[data-w]').forEach(b => b.onclick = () => {
           O.opts.heatBy = b.dataset.w;
           el.querySelectorAll('button[data-w]').forEach(x => x.classList.toggle('on', x === b));
@@ -1718,21 +1253,12 @@
         });
         el.querySelector('#eqtrail-seg').onchange = e => O.useSegment(+e.target.value);
         el.querySelector('#eqtrail-statsbtn').onclick = () => O.toggleStats();
-        el.querySelector('#eqtrail-bug').onclick = () => window.open(issueUrl('bug'), '_blank', 'noopener');
-        el.querySelector('#eqtrail-idea').onclick = () => window.open(issueUrl('idea'), '_blank', 'noopener');
-        el.querySelector('#eqtrail-vers').onclick = () => {
-          const box = el.querySelector('#eqtrail-verlist');
-          box.hidden = !box.hidden;
-          if (!box.hidden) { renderVersions(); checkVersion(true); }
-        };
         el.querySelector('#eqtrail-hideours').onclick = () => setHidden(true, O.hidden.site);
         el.querySelector('#eqtrail-hideall').onclick = () => setHidden(true, true);
         el.querySelectorAll('button[data-o]').forEach(b => b.onclick = () => {
           const k = b.dataset.o; O.opts[k] = !O.opts[k];
           b.classList.toggle('on', O.opts[k]);
-          saveSettings();
-          if (k === 'updateCheck') { checkVersion(O.opts[k]); renderVersions(); return; }
-          buildStats(); O.rebuild();
+          saveSettings(); buildStats(); O.rebuild();
         });
         makeDraggable(el, el.querySelector('h4'), 'panel');
         applyPos(el, 'panel');
@@ -1760,34 +1286,15 @@
       // truthful — but anything that changes an option WITHOUT going through a control (the console,
       // a restored setting, a future preset) would leave the widgets describing a state the map is no
       // longer in. Cheap enough to just re-assert after every rebuild.
-      function fmtOpt(k, v) {
-        return k === 'speed' ? v + '\u00d7'
-          : k === 'cell' ? String(v)
-          : k === 'relief' ? (v == 0 ? 'flat' : String(v))
-          : k === 'gapThreshold' ? fmtDur(v)
-          : k === 'gapFF' ? v + '\u00d7'
-          : Math.round(v * 100) + '%';
-      }
       function syncControls() {
         const el = document.getElementById('eqtrail-panel'); if (!el) return;
         el.querySelectorAll('input[type=range][data-k]').forEach(r => {
           const k = r.dataset.k, v = O.opts[k];
           if (document.activeElement !== r) r.value = String(v);
           const out = el.querySelector(`[data-v="${k}"]`);
-          if (out) out.textContent = fmtOpt(k, v);
+          if (out) out.textContent =
+            k === 'speed' ? v + '×' : k === 'cell' ? v : k === 'relief' ? (v == 0 ? 'flat' : v) : Math.round(v * 100) + '%';
         });
-        el.querySelectorAll('button[data-g]').forEach(x => x.classList.toggle('on', x.dataset.g === O.opts.gapMode));
-        el.querySelectorAll('button[data-a]').forEach(x => x.classList.toggle('on', x.dataset.a === O.opts.gapApply));
-        const ff = el.querySelector('#eqtrail-ffrow');
-        if (ff) ff.style.display = O.opts.gapMode === 'ff' ? 'flex' : 'none';
-        const gi = document.getElementById('eqtrail-gapinfo');
-        if (gi) {
-          const g = O.gapStats;
-          gi.textContent = !g || !g.gaps ? ''
-            : O.opts.gapMode === 'real'
-              ? `${g.gaps} gaps over ${fmtDur(O.opts.gapThreshold)} — shown in full`
-              : `${g.gaps} gaps · ${fmtDur(g.skipped)} of ${fmtDur(g.logSpan)} removed from playback`;
-        }
         el.querySelectorAll('button[data-c]').forEach(x => x.classList.toggle('on', x.dataset.c === O.opts.colorBy));
         el.querySelectorAll('button[data-w]').forEach(x => x.classList.toggle('on', x.dataset.w === O.opts.heatBy));
         el.querySelectorAll('button[data-t]').forEach(x => x.classList.toggle('on', !!O.opts[x.dataset.t]));
@@ -1802,15 +1309,6 @@
         s.textContent = `${O.raw.length} locs here` +
           (O.totalPts && O.totalPts !== O.raw.length ? ` of ${O.totalPts} in ${zones} zones` : '') +
           (O.runs > 1 ? ` · ${O.runs} runs` : '') +
-          // Say something self-explanatory in all three cases. "5 deaths, none placeable" is the one
-          // that matters: a sparse log can easily have deaths in this zone with no /loc within
-          // gapBreak of any of them, and silence there looks like a bug rather than missing data.
-          (() => {
-            const n = (O.graves || []).length, sk = O.gravesSkipped || 0;
-            if (!n && !sk) return '';
-            if (!n) return ` · ${sk} death${sk === 1 ? '' : 's'}, none placeable`;
-            return ` · ${n} death${n === 1 ? '' : 's'}` + (sk ? ` (${sk} unplaceable)` : '');
-          })() +
           (O.lone ? ` · ${O.lone} lone` : '') +
           (h ? ` · ${h.cells} cells · ${Math.round(h.cell * 10)} loc/cell` : '');
         renderTicks();
@@ -1839,8 +1337,6 @@
       #eqtrail-chartwrap{padding:0 10px 6px}
       #eqtrail-chart{display:block;width:100%;height:116px;background:#120f26;
         border:1px solid #2c2545;border-radius:7px}
-      #eqtrail-band{display:block;width:100%;height:58px;background:#120f26;
-        border:1px solid #2c2545;border-top:0;border-radius:0 0 7px 7px;margin-top:-1px}
       #eqtrail-legend{display:flex;flex-wrap:wrap;gap:9px;padding:2px 11px 11px;font-size:10.5px;color:#9d95bb}
       #eqtrail-legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px}
       #eqtrail-shint{padding:0 11px 10px;font-size:10px;color:#6d6590}`;
@@ -1853,7 +1349,6 @@
           <div id="eqtrail-cards"></div>
           <div id="eqtrail-chartwrap">
             <svg id="eqtrail-chart" viewBox="0 0 ${CHART.w} ${CHART.h}" preserveAspectRatio="none"></svg>
-            <svg id="eqtrail-band" viewBox="0 0 ${BAND.w} ${BAND.h}" preserveAspectRatio="none" style="display:none"></svg>
           </div>
           <div id="eqtrail-legend"></div>
           <div id="eqtrail-shint">click a card to add or remove it from the plot</div>`;
@@ -1869,7 +1364,7 @@
         const box = document.getElementById('eqtrail-cards');
         if (!box) return;
         box.innerHTML = METRICS.map(m => {
-          const has = m.ratio ? hasRatio(m) : (O.stats && O.stats.S[m.k]);
+          const has = O.stats && O.stats.S[m.k];
           const on = O.opts.series.indexOf(m.k) >= 0;
           const col = seriesColor(m.k);
           return `<div class="eqt-card${has ? '' : ' dead'}${on && has ? ' on' : ''}" data-k="${m.k}"
@@ -1887,10 +1382,7 @@
       function renderLegend() {
         const lg = document.getElementById('eqtrail-legend');
         if (!lg) return;
-        const picked = O.opts.series.filter(k => {
-          const m = METRICS.find(x => x.k === k);
-          return m.ratio ? hasRatio(m) : (O.stats && O.stats.S[k]);
-        });
+        const picked = O.opts.series.filter(k => O.stats && O.stats.S[k]);
         // A legend is always present for two or more series, and each entry is a direct label — which
         // is also what makes the palette's tightest CVD pair legal.
         lg.innerHTML = picked.map(k =>
@@ -1903,7 +1395,6 @@
         for (const m of METRICS) {
           const cell = document.querySelector(`#eqtrail-cards [data-v="${m.k}"]`);
           if (!cell) continue;
-          if (m.ratio) { cell.textContent = fmtVal('ratio', ratioAt(m, tNow)); continue; }
           const s = O.stats.S[m.k];
           cell.textContent = s ? fmtVal(m.fmt, valueAt(s, tNow)) : '—';
         }
@@ -1929,8 +1420,6 @@
       statsPanel();
       renderCards();
       addEventListener('keydown', onKey);
-      syncAbout();
-      checkVersion(false);
       window.EQTrail = O;
       console.log('[EQTrail] ready — drop a log on the panel. H hides the panels, Shift+H hides all UI.');
     })();

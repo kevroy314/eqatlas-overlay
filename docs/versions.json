@@ -1,0 +1,48 @@
+{
+  "versions": [
+    {
+      "v": "0.7.0",
+      "date": "2026-08-01",
+      "notes": "https://github.com/kevroy314/eqatlas-overlay/releases/tag/v0.7.0",
+      "pinned": "v/0.7.0/eqtrail.user.js"
+    },
+    {
+      "v": "0.6.0",
+      "date": "2026-08-01",
+      "notes": "https://github.com/kevroy314/eqatlas-overlay/releases/tag/v0.6.0",
+      "pinned": "v/0.6.0/eqtrail.user.js"
+    },
+    {
+      "v": "0.5.0",
+      "date": "2026-07-29",
+      "notes": "https://github.com/kevroy314/eqatlas-overlay/releases/tag/v0.5.0",
+      "pinned": "v/0.5.0/eqtrail.user.js"
+    },
+    {
+      "v": "0.4.0",
+      "date": "2026-07-29",
+      "notes": "https://github.com/kevroy314/eqatlas-overlay/releases/tag/v0.4.0",
+      "pinned": "v/0.4.0/eqtrail.user.js"
+    },
+    {
+      "v": "0.3.0",
+      "date": "2026-07-29",
+      "notes": "https://github.com/kevroy314/eqatlas-overlay/releases/tag/v0.3.0",
+      "pinned": "v/0.3.0/eqtrail.user.js"
+    },
+    {
+      "v": "0.2.0",
+      "date": "2026-07-28",
+      "notes": "https://github.com/kevroy314/eqatlas-overlay/releases/tag/v0.2.0",
+      "pinned": "v/0.2.0/eqtrail.user.js"
+    },
+    {
+      "v": "0.1.0",
+      "date": "2026-07-28",
+      "notes": "https://github.com/kevroy314/eqatlas-overlay/releases/tag/v0.1.0",
+      "pinned": "v/0.1.0/eqtrail.user.js"
+    }
+  ],
+  "latest": "0.7.0",
+  "install": "eqtrail.user.js"
+}

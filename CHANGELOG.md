@@ -1,5 +1,50 @@
 # Changelog
 
+## 0.7.0 — 2026-08-01
+
+Development here is hands-off — a friend runs it, something looks odd, and there is no practical
+path from "that's odd" to a filed issue, or off a bad release. These close that loop with **no
+backend**, using two things GitHub already provides.
+
+### Update awareness, and rolling back
+
+- The panel's new version row shows the running build and links to the install page when a newer
+  one exists.
+- **versions** lists recent releases. Each is a **pinned** build that deliberately carries no
+  `@updateURL` — which is the whole trick. With one, Tampermonkey would notice the newer release at
+  the other end and quietly pull the user back to the version they were trying to escape.
+- `tools/build.py` now writes `docs/v/<version>/eqtrail.user.js` and maintains `docs/versions.json`
+  on every build; `tools/backfill_pinned.py` generated the six historical ones straight from git
+  tags, so the rollback list has history from day one.
+
+### Issue reporting
+
+- **issue** and **idea** open GitHub's own new-issue form, pre-filled with a prompt and a collapsed
+  diagnostics block, labelled `bug` or `enhancement`. Verified the prefill survives GitHub's login
+  redirect, and the URL stays around 1.7 kB — well inside limits.
+- Diagnostics carry version, install flavour, browser, GPU, loaded zone, three.js revision, counts
+  and settings. They carry **nothing from the log**: not its contents, not its file name (which
+  holds the character name), not coordinates, not session timestamps. Asserted in testing against
+  the character name, the server name and the file extension.
+- Nothing is transmitted until the reader submits on GitHub, where the whole body is visible and
+  editable — which is the real consent gate.
+
+### One honest caveat
+
+This adds **the first outbound request this tool has ever made**: one static JSON file from the
+project's own Pages, once a day, with no parameters. The **updates** button switches it off and
+restores the fully-offline behaviour of the first six versions. The privacy wording in the README,
+the install page and the wiki has been corrected rather than left to imply otherwise.
+
+### Fixed while building it
+
+- The `updates` toggle initially sat in the panels row and pushed `swap X/Y` onto two lines; moved
+  to the version row, where it belongs anyway.
+- The version text shared a flex row with the buttons and ellipsed `update to 0.8.0` down to `u…`,
+  hiding the single most useful thing the row can say. It now has its own line.
+- The rollback hint inherited `white-space: nowrap` from the panel and clipped at 311px inside a
+  236px box instead of wrapping.
+
 ## 0.6.0 — 2026-07-30
 
 ### Gap handling

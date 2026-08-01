@@ -1,6 +1,21 @@
+// ==UserScript==
+// PINNED BUILD of 0.6.0. No @updateURL, so it will not auto-update away.
+// Install the current release from the install page to rejoin the update channel.
+// @name         EQ Trail — /loc path + dwell heatmap for the EQL Zone Atlas
+// @namespace    https://github.com/kevroy314/eqatlas-overlay
+// @version      0.6.0
+// @description  Drop an EverQuest log onto the EQL Zone Atlas: your /loc track plays back as an animated 3D trail, with a dwell heatmap of where the time actually went.
+// @homepageURL  https://kevroy314.github.io/eqatlas-overlay/
+// @match        https://eqltools.com/atlas*
+// @match        https://eqltools.com/zones/*
+// @match        https://norrath3d.com/*
+// @run-at       document-idle
+// @grant        none
+// ==/UserScript==
+
 (function () {
   'use strict';
-  window.__EQTRAIL_BUILD = { version: '0.7.0', flavour: 'extension', pinned: false };
+  window.__EQTRAIL_BUILD = { version: '0.6.0', flavour: 'userscript', pinned: true };
   // app.js publishes window.__dbg at the very END of an ES module, so a userscript or content
   // script running at document-idle can beat it. Poll for it; give up loudly rather than silently.
   var tries = 0;
@@ -104,13 +119,6 @@
         gapThreshold: 60,       // seconds — above this, an interval counts as a gap
         gapFF: 10,              // 'ff' divisor applied to the excess
         gapApply: 'both',       // 'both' | 'anim' | 'heat' — which layers the policy touches
-
-        // ---- release channel ----
-        // The ONLY network request this tool makes. It fetches one static JSON file from the project's
-        // own GitHub Pages, sends nothing with it, and is cached for a day. Off means the overlay is
-        // once again entirely offline — which is how it shipped for its first six versions, and some
-        // people will want it back.
-        updateCheck: true,
         // Break the ribbon when consecutive samples are further apart than this. A real log is not a
         // continuous track: the macro stops, you camp, you log out, you come back three days later —
         // and every zone visit gets merged into one series. Without a break the tube draws a confident
@@ -941,151 +949,6 @@
         return dt > O.opts.gapThreshold ? dt : null;
       }
 
-      // ======================= version & issue reporting ====================
-      // Development here is hands-off: a friend runs it, something looks wrong, and there is no
-      // practical path from "that's odd" to a filed issue. These three things close that loop without
-      // a backend of any kind — GitHub Pages serves a static manifest with `access-control-allow-origin: *`,
-      // and GitHub's own new-issue form accepts a prefilled title and body over the URL.
-      const BUILD = window.__EQTRAIL_BUILD || { version: 'dev', flavour: 'console', pinned: false };
-      const REPO = 'https://github.com/kevroy314/eqatlas-overlay';
-      const PAGES = 'https://kevroy314.github.io/eqatlas-overlay';
-      const VCHECK_KEY = 'eqtrail.vcheck.v1';
-      const DAY = 86400000;
-
-      const vparts = v => String(v || '0').split('.').map(n => parseInt(n, 10) || 0);
-      function newerThan(a, b) {                       // is a > b?
-        const A = vparts(a), B = vparts(b);
-        for (let i = 0; i < 3; i++) {
-          if ((A[i] || 0) > (B[i] || 0)) return true;
-          if ((A[i] || 0) < (B[i] || 0)) return false;
-        }
-        return false;
-      }
-
-      // Cached for a day so a browsing session costs at most one request, and failure is silent:
-      // offline, a page CSP, a rate limit or a typo in the manifest must never break the overlay.
-      async function checkVersion(force) {
-        if (!O.opts.updateCheck) { O.release = null; syncAbout(); return; }
-        let c = {};
-        try { c = JSON.parse(localStorage.getItem(VCHECK_KEY) || '{}'); } catch (e) {}
-        if (!force && c.at && Date.now() - c.at < DAY && c.data) { O.release = c.data; syncAbout(); return; }
-        try {
-          const r = await fetch(PAGES + '/versions.json', { cache: 'no-cache' });
-          if (!r.ok) throw new Error(r.status);
-          const d = await r.json();
-          try { localStorage.setItem(VCHECK_KEY, JSON.stringify({ at: Date.now(), data: d })); } catch (e) {}
-          O.release = d;
-        } catch (e) {
-          console.log('[EQTrail] version check skipped:', e.message);
-          O.release = c.data || null;                  // fall back to whatever we last saw
-        }
-        syncAbout();
-      }
-      O.checkVersion = checkVersion;
-
-      // What goes in a bug report. Deliberately NOTHING from the log itself — no file name (which
-      // carries the character name), no coordinates, no timestamps. Counts and settings only. The
-      // reader still sees the whole body in GitHub's form before submitting, which is the real consent
-      // gate; this just makes sure there is nothing there they would want to remove.
-      function gpuInfo() {
-        try {
-          const c = document.createElement('canvas');
-          const gl = c.getContext('webgl2') || c.getContext('webgl');
-          if (!gl) return 'no webgl';
-          const dbg = gl.getExtension('WEBGL_debug_renderer_info');
-          const name = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
-          const lose = gl.getExtension('WEBGL_lose_context');
-          if (lose) lose.loseContext();                // GL contexts are a limited resource — give it back
-          return String(name).slice(0, 90);
-        } catch (e) { return '?'; }
-      }
-
-      function diagnostics() {
-        const Z = D.Z, h = O.heatStats, g = O.gapStats;
-        const o = O.opts;
-        const lines = [
-          '', '', '---', '<details><summary>Diagnostics</summary>', '', '```',
-          `EQ Trail   ${BUILD.version}${BUILD.pinned ? ' (pinned)' : ''} · ${BUILD.flavour}`,
-          `page       ${location.host}${location.pathname}`,
-          `zone       ${Z ? Z.key : '(none loaded)'}   three r${T.REVISION}`,
-          `browser    ${navigator.userAgent}`,
-          `gpu        ${gpuInfo()}`,
-        ];
-        if (O.raw && O.raw.length) {
-          lines.push(
-            `log        ${O.raw.length} locs here, ${O.totalPts || O.raw.length} total, ` +
-            `${O.segments ? O.segments.length : 1} zones`,
-            `drawn      ${O.runs || 0} runs, ${O.graves ? O.graves.length : 0} graves` +
-            (h ? `, ${h.cells} cells` : ''),
-            `gaps       ${g ? g.gaps : 0} over ${o.gapThreshold}s` +
-            (g && g.skipped ? `, ${Math.round(g.skipped)}s removed` : ''));
-        } else {
-          lines.push('log        (none loaded)');
-        }
-        lines.push(`settings   ${JSON.stringify(o)}`, '```', '', '</details>');
-        return lines.join('\n');
-      }
-
-      // GitHub caps how much it will take on the URL; a runaway user-agent or settings blob must not
-      // silently produce a dead link. Trim the diagnostics rather than the person's own words.
-      function issueUrl(kind) {
-        const bug = kind === 'bug';
-        const title = bug ? '' : '';
-        const intro = bug
-          ? ['**What happened?**', '', '', '**What did you expect?**', '', '',
-             '**Which log / zone?** (please do not paste log contents — a description is enough)', '', '']
-          : ['**What would you like it to do?**', '', '', '**Why — what are you trying to find out?**', '', ''];
-        let body = intro.join('\n') + diagnostics();
-        const base = `${REPO}/issues/new?labels=${bug ? 'bug' : 'enhancement'}` +
-                     `&title=${encodeURIComponent(title)}&body=`;
-        while (encodeURIComponent(body).length + base.length > 6000 && body.length > 400) {
-          body = body.slice(0, body.length - 200);
-        }
-        return base + encodeURIComponent(body);
-      }
-      O.issueUrl = issueUrl;
-
-      // The about row. Three states: up to date, an update waiting, or the check turned off.
-      function syncAbout() {
-        const v = document.getElementById('eqtrail-ver');
-        if (!v) return;
-        const rel = O.release, cur = BUILD.version;
-        const bits = [`v${cur}`];
-        if (BUILD.pinned) bits.push('pinned');
-        if (!O.opts.updateCheck) bits.push('checks off');
-        else if (rel && newerThan(rel.latest, cur)) {
-          v.innerHTML = `v${cur}${BUILD.pinned ? ' pinned' : ''} · ` +
-            `<a href="${PAGES}/${rel.install}" target="_blank" rel="noopener">update to ${rel.latest} \u2192</a>`;
-          return;
-        } else if (rel) bits.push('up to date');
-        v.textContent = bits.join(' \u00b7 ');
-      }
-      O._syncAbout = syncAbout;
-
-      // Rolling back is the point here: a bad release should be one click to escape, not a git
-      // expedition. Each entry is a PINNED build with no @updateURL, so it stays put once installed.
-      function renderVersions() {
-        const box = document.getElementById('eqtrail-verlist');
-        if (!box) return;
-        const rel = O.release;
-        if (!rel || !rel.versions || !rel.versions.length) {
-          box.innerHTML = `<div class="hint">No version list yet — it is fetched once a day from the
-            project page.${O.opts.updateCheck ? '' : ' Update checks are currently <b>off</b>.'}
-            <a href="${REPO}/releases" target="_blank" rel="noopener">All releases \u2192</a></div>`;
-          return;
-        }
-        const rows = rel.versions.slice(0, 8).map(e => {
-          const cur = e.v === BUILD.version;
-          return `<a href="${PAGES}/${e.pinned}" target="_blank" rel="noopener"${cur ? ' class="cur"' : ''}>` +
-                 `<span>v${e.v}${cur ? ' \u2190 installed' : ''}</span><i>${e.date}</i></a>`;
-        }).join('');
-        box.innerHTML = rows +
-          `<div class="hint"><b>Pinned</b> — these do not auto-update, so a rollback sticks. Older ones
-           have no version row: return via <a href="${PAGES}/${rel.install}" target="_blank"
-           rel="noopener">the install page</a> · <a href="${REPO}/releases" target="_blank"
-           rel="noopener">notes</a></div>`;
-      }
-
       // ============================ gravestones =============================
       // One marker per death, placed where the /loc track says you were standing, revealed in step with
       // playback so a death shows up as the trail reaches it.
@@ -1525,27 +1388,6 @@
         color:#8d85ab;font-size:11px;cursor:pointer}
       #eqtrail-drop.hot{border-color:#7c6fe0;color:#cfc7ea;background:#221c3a}
       #eqtrail-stat{margin-top:7px;font:10px ui-monospace,monospace;color:#7d7495}
-      .eqt-about{margin-top:9px;padding-top:8px;border-top:1px solid #2c2545;
-        font-size:10px;color:#6d6590}
-      .eqt-aboutbtns{display:flex;align-items:center;gap:6px}
-      /* Its own line. Sharing a flex row with the buttons ellipsed "update to 0.8.0" down to "u…",
-         which hid the single most useful thing the row can ever say. */
-      .eqt-about #eqtrail-ver{font-family:ui-monospace,monospace;margin-bottom:5px;line-height:1.4}
-      .eqt-about #eqtrail-ver a{color:#8ee6a0;text-decoration:none;font-weight:600}
-      .eqt-about #eqtrail-ver a:hover{text-decoration:underline}
-      .eqt-about button{font-size:10px;padding:2px 7px}
-      #eqtrail-verlist{margin-top:7px;border:1px solid #2c2545;border-radius:7px;overflow:hidden}
-      #eqtrail-verlist a{display:flex;justify-content:space-between;gap:8px;padding:5px 9px;
-        font:11px ui-monospace,monospace;color:#cfc7ea;text-decoration:none;border-bottom:1px solid #221c3a}
-      #eqtrail-verlist a:last-child{border-bottom:0}
-      #eqtrail-verlist a:hover{background:#241d40}
-      #eqtrail-verlist a i{color:#6d6590;font-style:normal}
-      #eqtrail-verlist a.cur{color:#9fe8ff}
-      /* Explicit: this block inherits white-space:nowrap from the panel, which clipped the sentence
-         rather than wrapping it (scrollWidth 311 into a 236px box). */
-      #eqtrail-verlist .hint{padding:6px 9px;font-size:10px;color:#6d6590;line-height:1.45;
-        background:#171233;white-space:normal}
-      #eqtrail-verlist .hint a{color:#9fe8ff}
       .eqt-keyhint{margin-top:7px;font-size:10px;color:#6d6590;line-height:1.4}
       .eqt-keyhint b{color:#9fe8ff;font-family:ui-monospace,monospace;font-weight:600}`;
 
@@ -1662,17 +1504,7 @@
             <button id="eqtrail-hideall">all UI</button></div>
           <div class="eqt-keyhint">hidden? press <b>H</b> for the panels, <b>Shift</b>+<b>H</b> for everything</div>
           <div id="eqtrail-drop">drop an eqlog_*.txt here</div>
-          <div id="eqtrail-stat"></div>
-          <div class="eqt-about">
-            <div id="eqtrail-ver"></div>
-            <div class="eqt-aboutbtns">
-            <button id="eqtrail-bug" title="Opens a pre-filled GitHub issue. Includes your version, browser and counts — never your log.">issue</button>
-            <button id="eqtrail-idea" title="Suggest a feature — same, pre-filled on GitHub.">idea</button>
-            <button id="eqtrail-vers" title="Install a different version">versions</button>
-            <button data-o="updateCheck" title="Check the project page once a day for a newer version. Sends nothing — it is a plain fetch of one static file.">updates</button>
-            </div>
-          </div>
-          <div id="eqtrail-verlist" hidden></div></div>`;
+          <div id="eqtrail-stat"></div></div>`;
         document.body.appendChild(el);
 
         el.querySelector('#eqtrail-x').onclick = () => O.clear();
@@ -1718,21 +1550,12 @@
         });
         el.querySelector('#eqtrail-seg').onchange = e => O.useSegment(+e.target.value);
         el.querySelector('#eqtrail-statsbtn').onclick = () => O.toggleStats();
-        el.querySelector('#eqtrail-bug').onclick = () => window.open(issueUrl('bug'), '_blank', 'noopener');
-        el.querySelector('#eqtrail-idea').onclick = () => window.open(issueUrl('idea'), '_blank', 'noopener');
-        el.querySelector('#eqtrail-vers').onclick = () => {
-          const box = el.querySelector('#eqtrail-verlist');
-          box.hidden = !box.hidden;
-          if (!box.hidden) { renderVersions(); checkVersion(true); }
-        };
         el.querySelector('#eqtrail-hideours').onclick = () => setHidden(true, O.hidden.site);
         el.querySelector('#eqtrail-hideall').onclick = () => setHidden(true, true);
         el.querySelectorAll('button[data-o]').forEach(b => b.onclick = () => {
           const k = b.dataset.o; O.opts[k] = !O.opts[k];
           b.classList.toggle('on', O.opts[k]);
-          saveSettings();
-          if (k === 'updateCheck') { checkVersion(O.opts[k]); renderVersions(); return; }
-          buildStats(); O.rebuild();
+          saveSettings(); buildStats(); O.rebuild();
         });
         makeDraggable(el, el.querySelector('h4'), 'panel');
         applyPos(el, 'panel');
@@ -1929,8 +1752,6 @@
       statsPanel();
       renderCards();
       addEventListener('keydown', onKey);
-      syncAbout();
-      checkVersion(false);
       window.EQTrail = O;
       console.log('[EQTrail] ready — drop a log on the panel. H hides the panels, Shift+H hides all UI.');
     })();
