@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.7.1 — 2026-08-01
+
+Fixes [#4](https://github.com/kevroy314/eqatlas-overlay/issues/4) — three reported symptoms, one
+root cause.
+
+### The bug: a CSS class name collided with the host page
+
+Our version-list footnote used `class="hint"`. **The Atlas has its own `.hint`** — the floating pill
+under the 3D view that reads "scroll to fly toward the cursor…". Ours silently inherited its
+`position:absolute`, `border-radius:999px` and `pointer-events:none`, which produced exactly what
+was reported:
+
+| Reported | Cause |
+|---|---|
+| "a small window with too extreme curvature" | inherited `border-radius: 999px` |
+| "not clear how to dismiss the bubble" | inherited `position:absolute` detached it from the list |
+| "the click for upload passes through … creating a file dialog" | inherited `pointer-events:none`, so clicks fell through to the file-drop zone behind |
+
+Scoping our own selector would not have helped — the *host's* rule is what matches our element — so
+the class **name** has to be ours alone. Renamed to `eqt-vhint`, and the other generic names
+(`v`, `l`) were namespaced too, since single-letter classes are the same accident waiting to happen.
+An audit of every element the overlay creates against every host rule now shows no class collisions
+remaining; the only host rules that still match ours are element-level resets (`*`, `a`, `select`).
+
+### Also fixed
+
+- **The versions button now shows as pressed while its list is open.** Reported as "not clear how to
+  dismiss" — an untoggled button beside an open list gives no hint that it is the way to close it.
+- **`tools/build.py` now refuses to build if a backtick appears inside the CSS template literals.**
+  Found while writing the fix: with an even number of backticks the file still *parses* — the first
+  closes the literal, the next opens a new one — so `node --check` reports nothing while the
+  stylesheet is silently truncated from that point on. This had already bitten twice.
+
 ## 0.7.0 — 2026-08-01
 
 Development here is hands-off — a friend runs it, something looks odd, and there is no practical
