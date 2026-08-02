@@ -1,11 +1,11 @@
 // ==UserScript==
+// PINNED BUILD of 0.7.2. No @updateURL, so it will not auto-update away.
+// Install the current release from the install page to rejoin the update channel.
 // @name         EQ Trail — /loc path + dwell heatmap for the EQL Zone Atlas
 // @namespace    https://github.com/kevroy314/eqatlas-overlay
 // @version      0.7.2
 // @description  Drop an EverQuest log onto the EQL Zone Atlas: your /loc track plays back as an animated 3D trail, with a dwell heatmap of where the time actually went.
 // @homepageURL  https://kevroy314.github.io/eqatlas-overlay/
-// @downloadURL  https://kevroy314.github.io/eqatlas-overlay/eqtrail.user.js
-// @updateURL    https://kevroy314.github.io/eqatlas-overlay/eqtrail.user.js
 // @match        https://eqltools.com/atlas*
 // @match        https://eqltools.com/zones/*
 // @match        https://norrath3d.com/*
@@ -15,7 +15,7 @@
 
 (function () {
   'use strict';
-  window.__EQTRAIL_BUILD = { version: '0.7.2', flavour: 'userscript', pinned: false };
+  window.__EQTRAIL_BUILD = { version: '0.7.2', flavour: 'userscript', pinned: true };
   // app.js publishes window.__dbg at the very END of an ES module, so a userscript or content
   // script running at document-idle can beat it. Poll for it; give up loudly rather than silently.
   var tries = 0;
