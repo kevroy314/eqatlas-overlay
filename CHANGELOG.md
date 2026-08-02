@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.7.2 — 2026-08-01
+
+The 0.7.0 update flow worked but was clunky in two specific ways, both reported from real use.
+
+- **Updates were checked once a day, and only at load.** Having seen a version in the morning, a
+  release published an hour later stayed invisible until the next day — the only way to see it was
+  to toggle the setting off and on, which forces a fetch. It now re-checks whenever the tab regains
+  focus, throttled to once every 15 minutes so an afternoon of tab-switching is still only a handful
+  of requests for one small cached file. Clicking the version text checks immediately.
+- **Nothing said a reload was needed.** Tampermonkey installs the new script, but the open page goes
+  on running the old one — which made a successful update look like it had failed. Following the
+  update link now reveals a prompt saying so plainly, with a **Reload now** button, and stating what
+  survives: settings and panel positions are kept, the log needs dropping again. It clears itself
+  once the running version matches the published one.
+
+Deliberately **not** persisting the log across a reload. It is feasible — the track is small (225 KB
+for a 3,838-point session) though the combat events behind the Session panel are not (12.3 MB for a
+121 MB log, well past localStorage's 5 MB cap, so it would need IndexedDB). But every doc says
+"nothing from the log is ever stored", and quietly reversing that to save one drag-and-drop is a bad
+trade. Saying so clearly costs nothing and keeps the promise intact.
+
+Verified the throttle both blocks and permits — no fetch inside the window, exactly one after it
+elapses, and none at all while the tab is hidden or update checks are switched off.
+
 ## 0.7.1 — 2026-08-01
 
 Fixes [#4](https://github.com/kevroy314/eqatlas-overlay/issues/4) — three reported symptoms, one

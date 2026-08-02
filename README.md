@@ -78,8 +78,13 @@ exists, a **versions** list for rolling back, and **issue** / **idea** buttons t
 pre-filled GitHub issue.
 
 - The version check is **the only network request this tool makes** — one static JSON file from the
-  project's own Pages, cached for a day, carrying nothing about you. The `updates` button turns it
-  off and the overlay is entirely offline again.
+  project's own Pages, carrying nothing about you. It runs at load and again when the tab regains
+  focus, throttled to once every 15 minutes, and never while the tab is hidden. The `updates` button
+  turns it off and the overlay is entirely offline again. Clicking the version text checks at once.
+- Installing an update does **not** change the page you already have open — Tampermonkey replaces the
+  script, but the running copy is the old one until you reload. Following the update link says so and
+  offers a **Reload now** button. Settings and panel positions survive; the log has to be dropped
+  again, because nothing from it is ever written to disk.
 - Rollback targets are **pinned** builds with no `@updateURL`, so a downgrade sticks. Without that,
   Tampermonkey would see the newer release at the other end and pull the user straight back to the
   version they were escaping.

@@ -604,9 +604,22 @@ server.""", """
 straight to the install page, and Tampermonkey takes it from there.</p>
 
 <p>This is the <b>only</b> network request EQ Trail ever makes: a plain fetch of one static JSON file
-from the project's own GitHub Pages, <b>cached for a day</b>, carrying no parameters and no
-information about you. If it fails — offline, a firewall, a page policy — it fails silently and the
-overlay carries on.</p>
+from the project's own GitHub Pages, carrying no parameters and no information about you. It happens
+when the page loads and again when you come back to the tab, at most once every 15 minutes, and never
+while the tab is in the background. Clicking the version text checks straight away. If it fails —
+offline, a firewall, a page policy — it fails silently and the overlay carries on.</p>
+
+<h3>Installing an update does not change the open page</h3>
+
+<p>Tampermonkey replaces the script, but the tab you already have open keeps running the old copy
+until it is reloaded — which can make a perfectly successful update look like it did nothing. So
+following the update link brings up a prompt that says exactly that, with a <b>Reload now</b> button.</p>
+
+<div class="note">
+  <b>What survives a reload:</b> your settings and both panel positions. <b>What does not:</b> the
+  log — you will need to drop it again. That is a direct consequence of never writing any part of it
+  to disk, which is a trade we would rather keep than save you one drag-and-drop.
+</div>
 
 <div class="note">
   <b>Turn it off with the <code>updates</code> button</b> and the overlay is entirely offline again,

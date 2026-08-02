@@ -19,7 +19,7 @@ SRC = (ROOT / 'eqtrail-overlay.js').read_text()
 DOCS = ROOT / 'docs'
 EXT = DOCS / 'extension'
 
-VERSION = '0.7.1'
+VERSION = '0.7.2'
 REPO = 'https://github.com/kevroy314/eqatlas-overlay'
 PAGES = 'https://kevroy314.github.io/eqatlas-overlay'
 USER_JS_URL = f'{PAGES}/eqtrail.user.js'

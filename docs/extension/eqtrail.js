@@ -1,6 +1,6 @@
 (function () {
   'use strict';
-  window.__EQTRAIL_BUILD = { version: '0.7.1', flavour: 'extension', pinned: false };
+  window.__EQTRAIL_BUILD = { version: '0.7.2', flavour: 'extension', pinned: false };
   // app.js publishes window.__dbg at the very END of an ES module, so a userscript or content
   // script running at document-idle can beat it. Poll for it; give up loudly rather than silently.
   var tries = 0;
@@ -547,6 +547,8 @@
         clearTimeout(O._peekT); clearTimeout(saveTimer);
         detach(); O.raw = []; O.ev = {}; O.stats = null;
         removeEventListener('keydown', onKey);
+        removeEventListener('focus', recheckOnFocus);
+        document.removeEventListener('visibilitychange', recheckOnFocus);
         removeEventListener('pointermove', flashPeek);
         for (const id of ['eqtrail-panel', 'eqtrail-stats', 'eqtrail-peek']) {
           const e = document.getElementById(id); if (e) e.remove();
@@ -951,6 +953,12 @@
       const PAGES = 'https://kevroy314.github.io/eqatlas-overlay';
       const VCHECK_KEY = 'eqtrail.vcheck.v1';
       const DAY = 86400000;
+      // A once-a-day check meant that after seeing a version in the morning, a release published an
+      // hour later stayed invisible until tomorrow — the reporter had to toggle the setting off and on
+      // to force it. Re-check whenever the tab regains focus instead, throttled so an afternoon of
+      // tab-switching is still only a handful of requests for one small cached file.
+      const RECHECK_MS = 15 * 60 * 1000;
+      let lastCheckAt = 0;
 
       const vparts = v => String(v || '0').split('.').map(n => parseInt(n, 10) || 0);
       function newerThan(a, b) {                       // is a > b?
@@ -968,7 +976,9 @@
         if (!O.opts.updateCheck) { O.release = null; syncAbout(); return; }
         let c = {};
         try { c = JSON.parse(localStorage.getItem(VCHECK_KEY) || '{}'); } catch (e) {}
-        if (!force && c.at && Date.now() - c.at < DAY && c.data) { O.release = c.data; syncAbout(); return; }
+        if (!force && c.at && Date.now() - c.at < DAY && c.data) {
+          O.release = c.data; lastCheckAt = c.at; syncAbout(); return;
+        }
         try {
           const r = await fetch(PAGES + '/versions.json', { cache: 'no-cache' });
           if (!r.ok) throw new Error(r.status);
@@ -979,9 +989,16 @@
           console.log('[EQTrail] version check skipped:', e.message);
           O.release = c.data || null;                  // fall back to whatever we last saw
         }
+        lastCheckAt = Date.now();
         syncAbout();
       }
       O.checkVersion = checkVersion;
+
+      function recheckOnFocus() {
+        if (!O.opts.updateCheck || document.hidden) return;
+        if (Date.now() - lastCheckAt < RECHECK_MS) return;
+        checkVersion(true);
+      }
 
       // What goes in a bug report. Deliberately NOTHING from the log itself — no file name (which
       // carries the character name), no coordinates, no timestamps. Counts and settings only. The
@@ -1046,9 +1063,25 @@
       O.issueUrl = issueUrl;
 
       // The about row. Three states: up to date, an update waiting, or the check turned off.
+      // Tampermonkey installs the new script, but THIS page goes on running the old one until it is
+      // reloaded — and nothing said so, which is what made the update feel like it had not worked.
+      // We cannot detect the install itself, so this is shown once the reader has been sent to fetch it.
+      function showReloadNote() {
+        const n = document.getElementById('eqtrail-updnote');
+        if (!n) return;
+        n.hidden = false;
+        n.innerHTML = `<b>Installed? Reload to finish.</b><br>This page is still running
+          v${BUILD.version}. Your settings and panel positions are kept —
+          you will need to drop your log again.<button id="eqtrail-reload">Reload now</button>`;
+        n.querySelector('#eqtrail-reload').onclick = () => location.reload();
+      }
+
       function syncAbout() {
         const v = document.getElementById('eqtrail-ver');
         if (!v) return;
+        // Once we are back in step, the prompt has nothing left to say.
+        const n = document.getElementById('eqtrail-updnote');
+        if (n && O.release && !newerThan(O.release.latest, BUILD.version)) n.hidden = true;
         const rel = O.release, cur = BUILD.version;
         const bits = [`v${cur}`];
         if (BUILD.pinned) bits.push('pinned');
@@ -1056,11 +1089,18 @@
         else if (rel && newerThan(rel.latest, cur)) {
           v.innerHTML = `v${cur}${BUILD.pinned ? ' pinned' : ''} · ` +
             `<a href="${PAGES}/${rel.install}" target="_blank" rel="noopener">update to ${rel.latest} \u2192</a>`;
+          v.querySelector('a').addEventListener('click', () => setTimeout(showReloadNote, 400));
           return;
         } else if (rel) bits.push('up to date');
         v.textContent = bits.join(' \u00b7 ');
+        if (O.opts.updateCheck) {                      // no update pending — let a click ask again now
+          v.title = 'Click to check for updates now';
+          v.style.cursor = 'pointer';
+          v.onclick = () => { v.textContent = 'checking…'; checkVersion(true); };
+        } else { v.title = ''; v.style.cursor = ''; v.onclick = null; }
       }
       O._syncAbout = syncAbout;
+      O._showReloadNote = showReloadNote;
 
       // Rolling back is the point here: a bad release should be one click to escape, not a git
       // expedition. Each entry is a PINNED build with no @updateURL, so it stays put once installed.
@@ -1553,6 +1593,11 @@
       #eqtrail-verlist .eqt-vhint{padding:6px 9px;font-size:10px;color:#6d6590;line-height:1.45;
         background:#171233;white-space:normal}
       #eqtrail-verlist .eqt-vhint a{color:#9fe8ff}
+      #eqtrail-updnote{margin-top:8px;padding:9px 10px;border:1px solid #3d5a3a;border-left:3px solid #8ee6a0;
+        border-radius:0 8px 8px 0;background:#16241a;font-size:11px;color:#cfe8d4;line-height:1.45}
+      #eqtrail-updnote b{color:#8ee6a0}
+      #eqtrail-updnote button{margin-top:7px;width:100%;background:#2f5d3a;border-color:#4b8a5c}
+      #eqtrail-updnote button:hover{background:#3c7449}
       .eqt-keyhint{margin-top:7px;font-size:10px;color:#6d6590;line-height:1.4}
       .eqt-keyhint b{color:#9fe8ff;font-family:ui-monospace,monospace;font-weight:600}`;
 
@@ -1679,7 +1724,8 @@
             <button data-o="updateCheck" title="Check the project page once a day for a newer version. Sends nothing — it is a plain fetch of one static file.">updates</button>
             </div>
           </div>
-          <div id="eqtrail-verlist" hidden></div></div>`;
+          <div id="eqtrail-verlist" hidden></div>
+          <div id="eqtrail-updnote" hidden></div></div>`;
         document.body.appendChild(el);
 
         el.querySelector('#eqtrail-x').onclick = () => O.clear();
@@ -1939,6 +1985,8 @@
       statsPanel();
       renderCards();
       addEventListener('keydown', onKey);
+      addEventListener('focus', recheckOnFocus);
+      document.addEventListener('visibilitychange', recheckOnFocus);
       syncAbout();
       checkVersion(false);
       window.EQTrail = O;
